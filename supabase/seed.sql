@@ -1,0 +1,23 @@
+-- =============================================================================
+-- Development Seed Data
+-- Run this ONLY against a local development Supabase instance.
+-- NEVER run against production.
+--
+-- Note: auth.users entries must be created via the Supabase Auth API or
+-- the Supabase local dashboard. This seed file documents the expected
+-- test accounts but cannot insert directly into auth.users.
+-- =============================================================================
+
+-- Expected test accounts (create via Supabase local dashboard / CLI):
+--
+-- 1. Owner account
+--    Email:    owner@example.local
+--    Password: Test1234!
+--    After sign-up, the trigger will auto-create their org.
+--
+-- 2. Agent account
+--    Email:    agent@example.local
+--    Password: Test1234!
+--    After sign-up, manually invite this user to the owner's organization.
+
+-- No SQL data here intentionally — all records flow from the sign-up trigger.
