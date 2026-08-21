@@ -1,16 +1,33 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { Users } from "lucide-react";
-import { ComingSoon } from "@/components/shared/coming-soon";
+import { getUserOrganizations } from "@/modules/auth/queries";
+import { LeadsClient } from "@/modules/leads/components/leads-client";
+import { Card, CardContent } from "@/components/ui/card";
+import LeadsLoading from "./loading";
 
 export const metadata: Metadata = { title: "Leads" };
 
-export default function LeadsPage() {
+export default async function LeadsPage() {
+  const organizations = await getUserOrganizations();
+  const currentOrg = organizations[0] ?? null;
+
+  if (!currentOrg) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-muted-foreground">
+            No organization found. Please contact support.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // LeadsClient uses useSearchParams() which requires a Suspense boundary
+  // in the Next.js App Router.
   return (
-    <ComingSoon
-      title="Lead Management"
-      description="Capture, qualify, and manage your real estate leads. Track status, score potential, and assign follow-up tasks."
-      icon={Users}
-      phase="Phase 2"
-    />
+    <Suspense fallback={<LeadsLoading />}>
+      <LeadsClient organizationId={currentOrg.id} />
+    </Suspense>
   );
 }

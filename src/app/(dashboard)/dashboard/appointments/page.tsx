@@ -1,16 +1,31 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { CalendarDays } from "lucide-react";
-import { ComingSoon } from "@/components/shared/coming-soon";
+import { getUserOrganizations } from "@/modules/auth/queries";
+import { AppointmentsQueueClient } from "@/modules/appointments/components/appointments-queue-client";
+import { Card, CardContent } from "@/components/ui/card";
+import AppointmentsLoading from "./loading";
 
 export const metadata: Metadata = { title: "Appointments" };
 
-export default function AppointmentsPage() {
+export default async function AppointmentsPage() {
+  const organizations = await getUserOrganizations();
+  const currentOrg = organizations[0] ?? null;
+
+  if (!currentOrg) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-muted-foreground">
+            No organization found. Please contact support.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <ComingSoon
-      title="Appointment Scheduling"
-      description="Schedule and manage property viewings and client meetings. Calendar integration and automated reminders."
-      icon={CalendarDays}
-      phase="Phase 3"
-    />
+    <Suspense fallback={<AppointmentsLoading />}>
+      <AppointmentsQueueClient organizationId={currentOrg.id} />
+    </Suspense>
   );
 }

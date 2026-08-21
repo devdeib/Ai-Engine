@@ -7,6 +7,7 @@ import {
   Users,
   Building2,
   MessageSquare,
+  Clock,
   CalendarDays,
   Bot,
   BarChart3,
@@ -41,7 +42,7 @@ const navItems: NavItem[] = [
     label: "Leads",
     href: "/dashboard/leads",
     icon: Users,
-    implemented: false,
+    implemented: true,
   },
   {
     label: "Properties",
@@ -53,13 +54,19 @@ const navItems: NavItem[] = [
     label: "Conversations",
     href: "/dashboard/conversations",
     icon: MessageSquare,
-    implemented: false,
+    implemented: true,
+  },
+  {
+    label: "Follow-ups",
+    href: "/dashboard/follow-ups",
+    icon: Clock,
+    implemented: true,
   },
   {
     label: "Appointments",
     href: "/dashboard/appointments",
     icon: CalendarDays,
-    implemented: false,
+    implemented: true,
   },
   {
     label: "AI Agent",

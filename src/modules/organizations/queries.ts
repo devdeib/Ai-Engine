@@ -123,6 +123,30 @@ export async function getOrganizationMembers(
 }
 
 /**
+ * Returns true if candidateUserId is a member of the given organization.
+ *
+ * Intentionally does NOT throw — this is a non-throwing predicate used to
+ * validate a candidate user ID (e.g. an owner_id on a lead) before storing it.
+ * Use requireOrgMembership when you need the guard that throws TenantAccessError.
+ *
+ * This never exposes cross-tenant information: if the user is not found in the
+ * organization, it simply returns false.
+ */
+export async function isMemberOfOrg(
+  organizationId: string,
+  candidateUserId: string
+): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("organization_members")
+    .select("user_id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", candidateUserId)
+    .single();
+  return !error && data !== null;
+}
+
+/**
  * Updates organization name.
  * Requires owner or admin role.
  */
