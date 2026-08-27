@@ -340,8 +340,9 @@ describe("LeadFollowUp type structure (compile-time shape assertions)", () => {
       status: true,
       created_at: true,
       updated_at: true,
+      idempotency_key: true,
     };
-    expect(Object.keys(shape).length).toBe(10);
+    expect(Object.keys(shape).length).toBe(11);
   });
 
   it("assigned_user_id and notes are nullable; status defaults to pending on Insert", () => {
@@ -354,6 +355,7 @@ describe("LeadFollowUp type structure (compile-time shape assertions)", () => {
     expect(insert.assigned_user_id).toBeUndefined();
     expect(insert.notes).toBeUndefined();
     expect(insert.status).toBeUndefined();
+    expect(insert.idempotency_key).toBeUndefined();
   });
 
   it("a completed follow-up remains a stored row (not deleted)", () => {

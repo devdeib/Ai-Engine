@@ -33,6 +33,8 @@ import {
   conversationStartedContent,
   messageActivityContent,
 } from "@/modules/leads/activities/activity-content";
+import { triggerAiAfterInboundMessage } from "@/modules/ai/trigger";
+import { enqueueOutboundDeliveryIfExternal } from "@/modules/channels/delivery/enqueue";
 import type { ConversationWithLead, Message } from "@/lib/db/types";
 
 function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
@@ -173,6 +175,9 @@ export async function updateConversation(
  * Both inbound and outbound Phase 3 messages are human-operated.
  * After a successful insert, the parent conversation's updated_at is bumped
  * so the inbox sorts by recency.
+ *
+ * Human inbound messages then invoke the Phase 4.1 pipeline. AI failures
+ * after persist do not roll back the inbound message.
  */
 export async function createConversationMessage(
   organizationId: string,
@@ -233,5 +238,21 @@ export async function createConversationMessage(
     throw new Error(`Failed to update conversation recency: ${bump.error.message}`);
   }
 
-  return data as Message;
+  const message = data as Message;
+  if (parsed.data.direction === "outbound") {
+    await enqueueOutboundDeliveryIfExternal({
+      organizationId,
+      conversation,
+      messageId: message.id,
+    });
+  }
+
+  await triggerAiAfterInboundMessage({
+    organizationId,
+    userId,
+    conversationId,
+    message,
+  });
+
+  return message;
 }

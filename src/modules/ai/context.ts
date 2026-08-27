@@ -3,7 +3,7 @@
  * IDs and secrets are omitted from the prompt-facing shape.
  */
 import "server-only";
-import { getOrganization } from "@/modules/organizations/queries";
+import { getOrganization, getOrganizationName } from "@/modules/organizations/queries";
 import { getLead } from "@/modules/leads/queries";
 import { getConversation } from "@/modules/conversations/queries";
 import { listRecentConversationMessages } from "@/modules/conversations/queries";
@@ -15,10 +15,12 @@ import {
   AI_CONTEXT_SIDE_LIMIT,
   type AiContext,
 } from "@/modules/ai/types";
+import { buildPipelineSnapshot } from "@/modules/ai/pipeline";
+import { mapAuthorTypeForAiContext } from "@/modules/ai/principal";
 
 export async function buildAiContext(input: {
   organizationId: string;
-  userId: string;
+  userId: string | null;
   conversationId: string;
 }): Promise<AiContext> {
   const conversation = await getConversation(
@@ -27,9 +29,13 @@ export async function buildAiContext(input: {
     input.conversationId
   );
 
-  const [organization, lead, messages, followUps, appointments, activities] =
+  const [organizationName, lead, messages, followUps, appointments, activities] =
     await Promise.all([
-      getOrganization(input.organizationId, input.userId),
+      input.userId
+        ? getOrganization(input.organizationId, input.userId).then(
+            (organization) => organization.name
+          )
+        : getOrganizationName(input.organizationId),
       getLead(conversation.lead_id, input.organizationId, input.userId),
       listRecentConversationMessages(
         input.organizationId,
@@ -58,7 +64,7 @@ export async function buildAiContext(input: {
     ]);
 
   return {
-    organization: { name: organization.name },
+    organization: { name: organizationName },
     lead: {
       firstName: lead.first_name,
       lastName: lead.last_name,
@@ -77,7 +83,7 @@ export async function buildAiContext(input: {
     },
     messages: messages.map((message) => ({
       direction: message.direction,
-      authorType: message.author_type,
+      authorType: mapAuthorTypeForAiContext(message.author_type),
       body: message.body,
       createdAt: message.created_at,
     })),
@@ -96,5 +102,20 @@ export async function buildAiContext(input: {
       content: item.content,
       createdAt: item.created_at,
     })),
+    pipeline: await buildPipelineSnapshot({
+      organizationId: input.organizationId,
+      leadId: conversation.lead_id,
+      conversationId: input.conversationId,
+      leadStatus: lead.status,
+      conversationStatus: conversation.status,
+      requiresHuman: conversation.requires_human,
+      aiPausedAt: conversation.ai_paused_at,
+      contactEmailPresent: Boolean(lead.email && lead.email.trim()),
+      contactPhonePresent: Boolean(lead.phone && lead.phone.trim()),
+      messages: messages.map((message) => ({
+        direction: message.direction,
+        createdAt: message.created_at,
+      })),
+    }),
   };
 }

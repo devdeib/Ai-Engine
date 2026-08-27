@@ -33,8 +33,8 @@ export async function POST(
 
     const result = await processConversationMessage(
       organizationId,
-      user.id,
-      conversationId
+      conversationId,
+      { kind: "operator", userId: user.id }
     );
 
     return successResponse(result);

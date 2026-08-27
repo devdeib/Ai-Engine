@@ -6,6 +6,7 @@ import { NotFoundError, TenantAccessError } from "@/lib/errors";
 
 vi.mock("@/modules/organizations/queries", () => ({
   getOrganization: vi.fn(),
+  getOrganizationName: vi.fn(),
 }));
 vi.mock("@/modules/leads/queries", () => ({
   getLead: vi.fn(),
@@ -23,6 +24,9 @@ vi.mock("@/modules/appointments/queries", () => ({
 vi.mock("@/modules/leads/activities/queries", () => ({
   listLeadActivities: vi.fn(),
 }));
+vi.mock("@/modules/ai/pipeline", () => ({
+  buildPipelineSnapshot: vi.fn(),
+}));
 
 import { getOrganization } from "@/modules/organizations/queries";
 import { getLead } from "@/modules/leads/queries";
@@ -33,6 +37,7 @@ import {
 import { listLeadFollowUps } from "@/modules/follow-ups/queries";
 import { listLeadAppointments } from "@/modules/appointments/queries";
 import { listLeadActivities } from "@/modules/leads/activities/queries";
+import { buildPipelineSnapshot } from "@/modules/ai/pipeline";
 import { buildAiContext } from "@/modules/ai/context";
 
 const ORG_A = "aaaaaaaa-0000-0000-0000-000000000001";
@@ -50,6 +55,8 @@ function stubHappyPath() {
     status: "open",
     requires_human: false,
     ai_paused_at: null,
+    channel_account_id: null,
+    channel_identity_id: null,
     created_at: "2026-08-20T10:00:00Z",
     updated_at: "2026-08-20T10:00:00Z",
     lead: { id: LEAD_1, first_name: "Ahmed", last_name: "Ali", company_name: null },
@@ -89,6 +96,7 @@ function stubHappyPath() {
       direction: "inbound",
       body: "Hello",
       in_reply_to_message_id: null,
+      channel_identity_id: null,
       created_at: "2026-08-21T10:00:00Z",
     },
   ]);
@@ -132,6 +140,20 @@ function stubHappyPath() {
       created_at: "2026-08-20T09:00:00Z",
     },
   ]);
+  vi.mocked(buildPipelineSnapshot).mockResolvedValue({
+    leadStatus: "new",
+    conversationStatus: "open",
+    requiresHuman: false,
+    aiPaused: false,
+    latestMessageDirection: "inbound",
+    lastInboundAt: "2026-08-21T10:00:00Z",
+    lastOutboundAt: null,
+    hasScheduledAppointment: true,
+    hasPendingFollowUp: true,
+    hasPendingAppointmentApproval: false,
+    contactEmailPresent: true,
+    contactPhonePresent: true,
+  });
 }
 
 describe("buildAiContext", () => {
@@ -155,6 +177,10 @@ describe("buildAiContext", () => {
     expect(context.followUps[0]?.title).toBe("Call back");
     expect(context.appointments[0]?.location).toBe("Office");
     expect(context.recentActivities[0]?.content).toBe("Called the lead");
+    expect(context.pipeline.hasScheduledAppointment).toBe(true);
+    expect(context.pipeline.hasPendingFollowUp).toBe(true);
+    expect(JSON.stringify(context.pipeline)).not.toContain(ORG_A);
+    expect(JSON.stringify(context.pipeline)).not.toContain(LEAD_1);
     expect(JSON.stringify(context)).not.toContain(ORG_A);
     expect(JSON.stringify(context)).not.toContain(LEAD_1);
     expect(JSON.stringify(context)).not.toContain("secret notes");

@@ -24,6 +24,14 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("@/modules/ai/components/pending-ai-actions-panel", () => ({
+  PendingAiActionsPanel: () => null,
+}));
+
+vi.mock("@/modules/ai/components/ai-operator-insight-panel", () => ({
+  AiOperatorInsightPanel: () => null,
+}));
+
 const ORG_A = "aaaaaaaa-0000-0000-0000-000000000001";
 const LEAD_1 = "11111111-1111-4111-8111-111111111111";
 const CONV_1 = "cccccccc-0000-4000-8000-000000000001";
@@ -39,6 +47,8 @@ function makeConversation(
     status: "open",
     requires_human: false,
     ai_paused_at: null,
+    channel_account_id: null,
+    channel_identity_id: null,
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-01T11:00:00Z",
     lead: {
@@ -61,6 +71,7 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
     direction: "outbound",
     body: "Hello from us",
     in_reply_to_message_id: null,
+    channel_identity_id: null,
     created_at: "2026-08-01T10:05:00Z",
     ...overrides,
   };

@@ -70,6 +70,21 @@ export interface AiOrganizationContext {
   name: string;
 }
 
+export interface AiPipelineSnapshot {
+  leadStatus: LeadStatus;
+  conversationStatus: "open" | "closed";
+  requiresHuman: boolean;
+  aiPaused: boolean;
+  latestMessageDirection: "inbound" | "outbound";
+  lastInboundAt: string | null;
+  lastOutboundAt: string | null;
+  hasScheduledAppointment: boolean;
+  hasPendingFollowUp: boolean;
+  hasPendingAppointmentApproval: boolean;
+  contactEmailPresent: boolean;
+  contactPhonePresent: boolean;
+}
+
 export interface AiContext {
   organization: AiOrganizationContext;
   lead: AiLeadContext;
@@ -78,26 +93,87 @@ export interface AiContext {
   followUps: AiFollowUpContext[];
   appointments: AiAppointmentContext[];
   recentActivities: AiActivityContext[];
-}
-
-export interface AiProviderRequest {
-  systemPrompt: string;
-  promptVersion: string;
-  context: AiContext;
-}
-
-export interface AiProviderResponse {
-  text: string;
-}
-
-export interface AiExecutionResult {
-  outcome: "responded" | "skipped";
-  reason?: AiSkipReason;
-  messageId?: string;
+  pipeline: AiPipelineSnapshot;
 }
 
 export const AI_CONTEXT_MESSAGE_LIMIT = 20;
 export const AI_CONTEXT_SIDE_LIMIT = 5;
 export const AI_DEFAULT_TIMEOUT_MS = 15_000;
 export const AI_DEFAULT_MAX_OUTPUT_TOKENS = 400;
+export const AI_MAX_TOOL_CALLS = 2;
 export const SALES_AGENT_PROMPT_VERSION = "SALES_AGENT_PROMPT_V1";
+export const AI_TOOL_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
+
+export const AI_TOOL_NAMES = [
+  "get_lead_context",
+  "get_conversation_history",
+  "get_lead_appointments",
+  "get_lead_follow_ups",
+  "create_follow_up",
+  "create_appointment",
+] as const;
+
+export type AiToolName = (typeof AI_TOOL_NAMES)[number];
+
+export interface AiToolDescriptor {
+  name: AiToolName;
+  description: string;
+  inputJsonSchema: Record<string, unknown>;
+}
+
+export type AiProviderTurn =
+  | { type: "text"; text: string }
+  | { type: "tool_call"; id: string; name: string; arguments: unknown };
+
+/**
+ * Text-only provider result. `{ text }` remains valid; the service normalizes
+ * it to `{ type: "text", text }` so existing callers keep working.
+ */
+export type AiProviderResponse = { text: string } | AiProviderTurn;
+
+export type AiProviderHistoryItem =
+  | { role: "assistant"; turn: Extract<AiProviderTurn, { type: "tool_call" }> }
+  | { role: "tool"; id: string; name: string; result: unknown };
+
+export interface AiProviderRequest {
+  systemPrompt: string;
+  promptVersion: string;
+  context: AiContext;
+  tools?: AiToolDescriptor[];
+  history?: AiProviderHistoryItem[];
+}
+
+/**
+ * Server-owned analysis request. promptVersion and schemaVersion are constants,
+ * never model-authored.
+ */
+export interface AiAnalysisRequest {
+  systemPrompt: string;
+  promptVersion: string;
+  schemaVersion: string;
+  context: AiContext;
+  draftReply: string;
+}
+
+/**
+ * Structured pipeline result.
+ *
+ * `failed` is not returned as a body — provider/validation failures throw
+ * safe AppError subclasses (HTTP 502) so the API layer never leaks internals.
+ */
+export type AiSkippedReason = Exclude<AiSkipReason, "requires_human">;
+
+export type AiExecutionResult =
+  | {
+      outcome: "responded";
+      messageId: string;
+      activityId: string;
+    }
+  | {
+      outcome: "skipped";
+      reason: AiSkippedReason;
+    }
+  | {
+      outcome: "escalated";
+      reason: "requires_human";
+    };

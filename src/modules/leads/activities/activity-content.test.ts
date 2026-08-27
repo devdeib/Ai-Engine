@@ -5,6 +5,9 @@ import {
   aiPausedContent,
   aiResumedContent,
   aiResponseGeneratedContent,
+  aiAppointmentApprovalRequestedContent,
+  aiAppointmentRequestRejectedContent,
+  aiAppointmentRequestExpiredContent,
   appointmentActivityContent,
   conversationStartedContent,
   followUpActivityContent,
@@ -57,5 +60,14 @@ describe("activity content helpers", () => {
     expect(aiPausedContent()).toBe("AI paused");
     expect(aiResumedContent()).toBe("AI resumed");
     expect(aiEscalatedContent()).toBe("Escalated to human");
+    expect(aiAppointmentApprovalRequestedContent()).toBe(
+      "AI requested an appointment approval."
+    );
+    expect(aiAppointmentRequestRejectedContent()).toBe(
+      "AI appointment request rejected."
+    );
+    expect(aiAppointmentRequestExpiredContent()).toBe(
+      "AI appointment request expired."
+    );
   });
 });

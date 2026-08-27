@@ -71,6 +71,8 @@ describe("POST /conversations/:id/ai/escalate", () => {
       status: "open",
       requires_human: true,
       ai_paused_at: "2026-08-21T12:00:00Z",
+      channel_account_id: null,
+      channel_identity_id: null,
       created_at: "2026-08-20T10:00:00Z",
       updated_at: "2026-08-21T12:00:00Z",
       lead: { id: LEAD_1, first_name: "Ahmed", last_name: "Ali", company_name: null },

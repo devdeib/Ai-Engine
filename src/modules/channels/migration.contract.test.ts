@@ -1,0 +1,136 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const enums = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260827000001_channel_enums.sql"),
+  "utf8"
+);
+const substrate = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260827000002_channel_substrate.sql"),
+  "utf8"
+);
+const reliability = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260827000003_channel_reliability.sql"),
+  "utf8"
+);
+const generalization = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260827000004_external_channel_generalization.sql"),
+  "utf8"
+);
+const whatsapp = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260827000005_whatsapp_channel.sql"),
+  "utf8"
+);
+
+describe("channel substrate migration contract", () => {
+  it("adds only the test conversation channel", () => {
+    expect(enums).toContain("ADD VALUE IF NOT EXISTS 'test'");
+    expect(enums.toLowerCase()).not.toContain("whatsapp");
+    expect(enums.toLowerCase()).not.toContain("'email'");
+    expect(enums.toLowerCase()).not.toContain("'sms'");
+  });
+
+  it("preserves in_app uniqueness and adds external identity uniqueness", () => {
+    expect(substrate).toContain("conversations_one_open_external_per_identity");
+    expect(substrate).not.toContain("DROP INDEX IF EXISTS conversations_one_open_in_app_per_lead");
+    expect(substrate).not.toContain("DROP INDEX conversations_one_open_in_app_per_lead");
+  });
+
+  it("keeps secrets off channel_accounts and without member SELECT", () => {
+    expect(substrate).toContain("CREATE TABLE public.channel_account_secrets");
+    expect(substrate).toContain("No authenticated policies: members cannot read webhook secrets");
+    expect(substrate).not.toContain("channel_account_secrets: members can select");
+  });
+
+  it("enforces the channel_ingress actor contract", () => {
+    expect(substrate).toContain("ai_execution_jobs_trigger_actor_chk");
+    expect(substrate).toContain("trigger_source = 'channel_ingress'");
+    expect(substrate).toContain("requested_by_user_id IS NULL");
+  });
+
+  it("does not grant delivery jobs AI execution authority", () => {
+    expect(substrate).toContain("claim_channel_delivery_jobs");
+    expect(substrate).not.toContain("processConversationMessage");
+  });
+});
+
+describe("channel reliability migration contract", () => {
+  it("adds persist_channel_inbound without dropping inbound uniqueness or RLS", () => {
+    expect(reliability).toContain("CREATE OR REPLACE FUNCTION public.persist_channel_inbound");
+    expect(reliability).toContain("EXCEPTION");
+    expect(reliability).toContain("WHEN unique_violation THEN");
+    expect(reliability).toContain("GRANT EXECUTE ON FUNCTION public.persist_channel_inbound");
+    expect(reliability).toContain("TO service_role");
+    expect(reliability).not.toContain("DROP INDEX");
+    expect(reliability).not.toContain("DISABLE ROW LEVEL SECURITY");
+    expect(reliability).not.toContain("DROP POLICY");
+  });
+
+  it("does not introduce WhatsApp, Email, or SMS", () => {
+    expect(reliability.toLowerCase()).not.toContain("whatsapp");
+    expect(reliability.toLowerCase()).not.toContain("'email'");
+    expect(reliability.toLowerCase()).not.toContain("'sms'");
+  });
+});
+
+describe("external-channel generalization migration contract", () => {
+  it("generalizes external conversation scope without adding providers or weakening RLS", () => {
+    expect(generalization).toContain("channel <> 'in_app'");
+    expect(generalization).toContain("conversations_channel_scope_chk");
+    expect(generalization).toContain("conversations_one_open_external_per_identity");
+    expect(generalization).toContain("CREATE OR REPLACE FUNCTION public.persist_channel_inbound");
+    expect(generalization).not.toContain("DISABLE ROW LEVEL SECURITY");
+    expect(generalization).not.toContain("DROP POLICY");
+    expect(generalization.toLowerCase()).not.toContain("whatsapp");
+    expect(generalization.toLowerCase()).not.toContain("'email'");
+    expect(generalization.toLowerCase()).not.toContain("'sms'");
+    expect(generalization).not.toContain("ADD VALUE");
+  });
+});
+
+describe("WhatsApp channel migration contract", () => {
+  it("adds WhatsApp enum values additively without dropping existing constraints", () => {
+    expect(whatsapp).toContain("ADD VALUE IF NOT EXISTS 'whatsapp'");
+    expect(whatsapp).toContain("ALTER TYPE public.conversation_channel");
+    expect(whatsapp).toContain("ALTER TYPE public.channel_kind");
+    expect(whatsapp).not.toContain("DROP TYPE");
+    expect(whatsapp).not.toContain("DISABLE ROW LEVEL SECURITY");
+    expect(whatsapp).not.toContain("DROP POLICY");
+    expect(whatsapp.toLowerCase()).not.toContain("'email'");
+    expect(whatsapp.toLowerCase()).not.toContain("'sms'");
+  });
+
+  it("adds nullable WhatsApp secret columns without weakening webhook_secret length", () => {
+    expect(whatsapp).toContain("provider_access_token TEXT NULL");
+    expect(whatsapp).toContain("webhook_verify_token TEXT NULL");
+    expect(whatsapp).toContain("BETWEEN 1 AND 4096");
+    expect(whatsapp).not.toContain(
+      "provider_access_token IS NULL\n    OR char_length(provider_access_token) BETWEEN 32 AND 128"
+    );
+    expect(substrate).toContain(
+      "CHECK (char_length(webhook_secret) BETWEEN 32 AND 128)"
+    );
+  });
+});
+
+describe("Email channel migration contract", () => {
+  const email = readFileSync(
+    resolve(process.cwd(), "supabase/migrations/20260827000006_email_channel.sql"),
+    "utf8"
+  );
+
+  it("adds Email enum values additively without changing RLS or uniqueness", () => {
+    expect(email).toContain("ADD VALUE IF NOT EXISTS 'email'");
+    expect(email).toContain("ALTER TYPE public.conversation_channel");
+    expect(email).toContain("ALTER TYPE public.channel_kind");
+    expect(email).not.toContain("DROP TYPE");
+    expect(email).not.toContain("DISABLE ROW LEVEL SECURITY");
+    expect(email).not.toContain("DROP POLICY");
+    expect(email).not.toContain("DROP CONSTRAINT");
+    expect(email.toLowerCase()).not.toContain("'sms'");
+    expect(email).not.toContain("DROP CONSTRAINT conversations_channel_scope_chk");
+    expect(email).not.toContain("DROP INDEX");
+    expect(email).not.toContain("ALTER TABLE");
+  });
+});

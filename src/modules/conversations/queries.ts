@@ -168,10 +168,12 @@ export async function listConversations(
  */
 export async function getConversation(
   organizationId: string,
-  userId: string,
+  userId: string | null,
   conversationId: string
 ): Promise<ConversationWithLead> {
-  await requireOrgMembership(organizationId, userId);
+  if (userId !== null) {
+    await requireOrgMembership(organizationId, userId);
+  }
 
   const supabase = await createClient();
   return assertConversationInOrg(supabase, conversationId, organizationId);
@@ -217,11 +219,13 @@ export async function listConversationMessages(
  */
 export async function listRecentConversationMessages(
   organizationId: string,
-  userId: string,
+  userId: string | null,
   conversationId: string,
   limit = 20
 ): Promise<Message[]> {
-  await requireOrgMembership(organizationId, userId);
+  if (userId !== null) {
+    await requireOrgMembership(organizationId, userId);
+  }
 
   const supabase = await createClient();
   await assertConversationInOrg(supabase, conversationId, organizationId);

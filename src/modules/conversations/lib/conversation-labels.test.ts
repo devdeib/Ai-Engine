@@ -11,8 +11,11 @@ describe("conversation labels", () => {
     expect(CONVERSATION_STATUS_LABELS.closed).toBe("Closed");
   });
 
-  it("labels the in_app channel", () => {
+  it("labels the in_app and test channels", () => {
     expect(CONVERSATION_CHANNEL_LABELS.in_app).toBe("In App");
+    expect(CONVERSATION_CHANNEL_LABELS.test).toBe("Test");
+    expect(CONVERSATION_CHANNEL_LABELS.whatsapp).toBe("WhatsApp");
+    expect(CONVERSATION_CHANNEL_LABELS.email).toBe("Email");
   });
 });
 

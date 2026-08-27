@@ -15,6 +15,7 @@ const message: Message = {
   direction: "outbound",
   body: "Hello there",
   in_reply_to_message_id: null,
+  channel_identity_id: null,
   created_at: "2026-08-01T10:05:00Z",
 };
 

@@ -39,6 +39,8 @@ function makeConversation(): ConversationWithLead {
     status: "open",
     requires_human: false,
     ai_paused_at: null,
+    channel_account_id: null,
+    channel_identity_id: null,
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-01T11:00:00Z",
     lead: {

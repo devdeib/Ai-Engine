@@ -110,11 +110,13 @@ export async function assertAppointmentInOrg(
  */
 export async function listLeadAppointments(
   organizationId: string,
-  userId: string,
+  userId: string | null,
   leadId: string,
   pagination: AppointmentsPagination = { page: 1, limit: 20 }
 ): Promise<Appointment[]> {
-  await requireOrgMembership(organizationId, userId);
+  if (userId !== null) {
+    await requireOrgMembership(organizationId, userId);
+  }
 
   const supabase = await createClient();
   await assertLeadInOrg(supabase, leadId, organizationId);

@@ -52,6 +52,14 @@ vi.mock("@/modules/appointments/components/appointment-list", () => ({
   AppointmentList: () => <div>Appointments section</div>,
 }));
 
+vi.mock("@/modules/ai/components/pending-ai-actions-panel", () => ({
+  PendingAiActionsPanel: () => null,
+}));
+
+vi.mock("@/modules/ai/components/ai-operator-insight-panel", () => ({
+  AiOperatorInsightPanel: () => null,
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     href,

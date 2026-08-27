@@ -147,9 +147,11 @@ export async function listLeads(
 export async function getLead(
   leadId: string,
   organizationId: string,
-  userId: string
+  userId: string | null
 ): Promise<Lead> {
-  await requireOrgMembership(organizationId, userId);
+  if (userId !== null) {
+    await requireOrgMembership(organizationId, userId);
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase

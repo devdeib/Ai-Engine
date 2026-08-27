@@ -8,6 +8,8 @@ import { ConversationHeader } from "@/modules/conversations/components/conversat
 import { ConversationAiControls } from "@/modules/conversations/components/conversation-ai-controls";
 import { ConversationMessage } from "@/modules/conversations/components/conversation-message";
 import { MessageComposer } from "@/modules/conversations/components/message-composer";
+import { PendingAiActionsPanel } from "@/modules/ai/components/pending-ai-actions-panel";
+import { AiOperatorInsightPanel } from "@/modules/ai/components/ai-operator-insight-panel";
 
 const MESSAGE_PAGE_SIZE = 20;
 
@@ -55,6 +57,7 @@ export function ConversationThread({
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [isUpdatingAi, setIsUpdatingAi] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [hitlRefreshKey, setHitlRefreshKey] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
 
   const fetchMessages = useCallback(async () => {
@@ -200,6 +203,24 @@ export function ConversationThread({
         onResume={() => void postAiAction("resume")}
         onEscalate={() => void postAiAction("escalate")}
         onGenerate={() => void postAiAction("process")}
+      />
+
+      <AiOperatorInsightPanel
+        organizationId={organizationId}
+        conversationId={conversation.id}
+        compact
+        onAppointmentRequested={() => setHitlRefreshKey((key) => key + 1)}
+        onHandoffConfirmed={(updated) => {
+          onConversationUpdated(updated);
+          onListRefresh();
+        }}
+      />
+
+      <PendingAiActionsPanel
+        organizationId={organizationId}
+        conversationId={conversation.id}
+        compact
+        refreshKey={hitlRefreshKey}
       />
 
       {statusError ? (

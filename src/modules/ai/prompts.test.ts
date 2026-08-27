@@ -35,6 +35,20 @@ const context: AiContext = {
   followUps: [],
   appointments: [],
   recentActivities: [],
+  pipeline: {
+    leadStatus: "new",
+    conversationStatus: "open",
+    requiresHuman: false,
+    aiPaused: false,
+    latestMessageDirection: "inbound",
+    lastInboundAt: null,
+    lastOutboundAt: null,
+    hasScheduledAppointment: false,
+    hasPendingFollowUp: false,
+    hasPendingAppointmentApproval: false,
+    contactEmailPresent: false,
+    contactPhonePresent: false,
+  },
 };
 
 describe("sales agent prompt", () => {
@@ -47,6 +61,8 @@ describe("sales agent prompt", () => {
     expect(SALES_AGENT_PROMPT_V1).toMatch(/Never invent/i);
     expect(SALES_AGENT_PROMPT_V1).toMatch(/Do not pretend to be a human/i);
     expect(SALES_AGENT_PROMPT_V1).toMatch(/untrusted/i);
+    expect(SALES_AGENT_PROMPT_V1).toMatch(/pending_approval/);
+    expect(SALES_AGENT_PROMPT_V1).toMatch(/does not create, book, confirm, or schedule/i);
   });
 
   it("does not interpolate lead text into the system prompt", () => {

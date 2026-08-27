@@ -23,6 +23,14 @@ import { recordLeadActivity } from "@/modules/leads/activities/queries";
 import { followUpActivityContent } from "@/modules/leads/activities/activity-content";
 import type { LeadFollowUp } from "@/lib/db/types";
 
+function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "23505" ||
+    /duplicate key|unique constraint/i.test(error.message ?? "")
+  );
+}
+
 async function assertAssigneeInOrg(
   organizationId: string,
   assignedUserId: string | null | undefined
@@ -38,11 +46,14 @@ async function assertAssigneeInOrg(
 
 export async function createLeadFollowUp(
   organizationId: string,
-  userId: string,
+  userId: string | null,
   leadId: string,
-  input: unknown
+  input: unknown,
+  options?: { idempotencyKey?: string }
 ): Promise<LeadFollowUp> {
-  await requireOrgMembership(organizationId, userId);
+  if (userId !== null) {
+    await requireOrgMembership(organizationId, userId);
+  }
 
   const parsed = createFollowUpSchema.safeParse(input);
   if (!parsed.success) {
@@ -57,18 +68,35 @@ export async function createLeadFollowUp(
   const supabase = await createClient();
   await assertLeadInOrg(supabase, leadId, organizationId);
 
+  const insertPayload: Record<string, unknown> = {
+    organization_id: organizationId,
+    lead_id: leadId,
+    title: parsed.data.title,
+    notes: parsed.data.notes ?? null,
+    due_at: parsed.data.due_at,
+    assigned_user_id: parsed.data.assigned_user_id ?? null,
+  };
+  if (options?.idempotencyKey) {
+    insertPayload.idempotency_key = options.idempotencyKey;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from("lead_follow_ups") as any)
-    .insert({
-      organization_id: organizationId,
-      lead_id: leadId,
-      title: parsed.data.title,
-      notes: parsed.data.notes ?? null,
-      due_at: parsed.data.due_at,
-      assigned_user_id: parsed.data.assigned_user_id ?? null,
-    })
+    .insert(insertPayload)
     .select()
     .single();
+
+  if (isUniqueViolation(error) && options?.idempotencyKey) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = await (supabase.from("lead_follow_ups") as any)
+      .select()
+      .eq("organization_id", organizationId)
+      .eq("idempotency_key", options.idempotencyKey)
+      .single();
+    if (existing.data) {
+      return existing.data as LeadFollowUp;
+    }
+  }
 
   if (error || !data) {
     throw new Error(`Failed to create follow-up: ${error?.message}`);

@@ -15,7 +15,7 @@ type LogLevel = "debug" | "info" | "warn" | "error";
 
 interface LogContext {
   organizationId?: string;
-  userId?: string;
+  userId?: string | null;
   requestId?: string;
   [key: string]: unknown;
 }

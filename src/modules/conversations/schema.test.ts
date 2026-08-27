@@ -408,10 +408,12 @@ describe("Conversation type structure (compile-time shape assertions)", () => {
       status: true,
       requires_human: true,
       ai_paused_at: true,
+      channel_account_id: true,
+      channel_identity_id: true,
       created_at: true,
       updated_at: true,
     };
-    expect(Object.keys(shape).length).toBe(9);
+    expect(Object.keys(shape).length).toBe(11);
   });
 });
 
@@ -426,9 +428,10 @@ describe("Message type structure (compile-time shape assertions)", () => {
       direction: true,
       body: true,
       in_reply_to_message_id: true,
+      channel_identity_id: true,
       created_at: true,
     };
-    expect(Object.keys(shape).length).toBe(9);
+    expect(Object.keys(shape).length).toBe(10);
   });
 
   it("author_user_id is nullable (system/AI messages must not impersonate a user)", () => {
@@ -441,6 +444,7 @@ describe("Message type structure (compile-time shape assertions)", () => {
       direction: "outbound",
       body: "System placeholder",
       in_reply_to_message_id: null,
+      channel_identity_id: null,
       created_at: "2026-08-20T00:00:00Z",
     };
     expect(row.author_user_id).toBeNull();
@@ -457,6 +461,7 @@ describe("Message type structure (compile-time shape assertions)", () => {
       direction: true,
       body: true,
       in_reply_to_message_id: true,
+      channel_identity_id: true,
       created_at: true,
     } satisfies Record<keyof Message, true>);
     expect(keys).not.toContain("updated_at");
@@ -493,6 +498,8 @@ describe("Handoff foundation (Phase 3.7 — columns reserved for Phase 4)", () =
       status: "open",
       requires_human: false,
       ai_paused_at: null,
+      channel_account_id: null,
+      channel_identity_id: null,
       created_at: "2026-08-20T00:00:00Z",
       updated_at: "2026-08-20T00:00:00Z",
     };

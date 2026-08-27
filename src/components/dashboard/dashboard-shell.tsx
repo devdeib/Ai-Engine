@@ -72,7 +72,7 @@ const navItems: NavItem[] = [
     label: "AI Agent",
     href: "/dashboard/ai-agent",
     icon: Bot,
-    implemented: false,
+    implemented: true,
   },
   {
     label: "Analytics",

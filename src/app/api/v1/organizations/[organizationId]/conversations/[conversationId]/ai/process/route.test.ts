@@ -130,11 +130,27 @@ describe("POST /conversations/:id/ai/process", () => {
     expect(body.data).toEqual({ outcome: "skipped", reason: "paused" });
   });
 
+  it("returns 200 with an escalated outcome when a human is required", async () => {
+    vi.mocked(getOrgContext).mockResolvedValue(mockOrgContext);
+    vi.mocked(processConversationMessage).mockResolvedValue({
+      outcome: "escalated",
+      reason: "requires_human",
+    });
+    const res = await POST(makePost(BASE_PATH), makeContext());
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({
+      outcome: "escalated",
+      reason: "requires_human",
+    });
+  });
+
   it("passes trusted org and user ids, ignoring forged body identity", async () => {
     vi.mocked(getOrgContext).mockResolvedValue(mockOrgContext);
     vi.mocked(processConversationMessage).mockResolvedValue({
       outcome: "responded",
       messageId: "22222222-0000-4000-8000-0000000000bb",
+      activityId: "33333333-0000-4000-8000-0000000000cc",
     });
 
     await POST(
@@ -148,8 +164,9 @@ describe("POST /conversations/:id/ai/process", () => {
 
     expect(processConversationMessage).toHaveBeenCalledWith(
       ORG_A,
-      USER_1,
-      CONV_1
+      CONV_1,
+      { kind: "operator", userId: USER_1 }
     );
   });
 });
+

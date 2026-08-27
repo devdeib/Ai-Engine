@@ -263,8 +263,9 @@ describe("Appointment type structure", () => {
       notes: true,
       created_at: true,
       updated_at: true,
+      idempotency_key: true,
     };
-    expect(Object.keys(shape).length).toBe(11);
+    expect(Object.keys(shape).length).toBe(12);
   });
 
   it("Insert defaults status and nullable fields", () => {
@@ -276,6 +277,7 @@ describe("Appointment type structure", () => {
     expect(insert.status).toBeUndefined();
     expect(insert.ends_at).toBeUndefined();
     expect(insert.assigned_user_id).toBeUndefined();
+    expect(insert.idempotency_key).toBeUndefined();
   });
 });
 

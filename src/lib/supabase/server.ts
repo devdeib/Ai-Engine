@@ -8,8 +8,16 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { env } from "@/lib/env";
 import type { Database } from "@/lib/db/types";
+import { getSupabaseClientOverride } from "@/lib/supabase/client-override";
 
 export async function createClient() {
+  const override = getSupabaseClientOverride();
+  if (override) {
+    return override as unknown as ReturnType<
+      typeof createServerClient<Database>
+    >;
+  }
+
   const cookieStore = await cookies();
 
   return createServerClient<Database>(

@@ -20,6 +20,9 @@ export const CONVERSATION_STATUS_CLASSES: Record<ConversationStatus, string> = {
 
 export const CONVERSATION_CHANNEL_LABELS: Record<ConversationChannel, string> = {
   in_app: "In App",
+  test: "Test",
+  whatsapp: "WhatsApp",
+  email: "Email",
 };
 
 export function leadDisplayName(

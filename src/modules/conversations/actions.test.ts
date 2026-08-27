@@ -23,9 +23,29 @@ vi.mock("@/modules/leads/activities/queries", () => ({
   recordLeadActivity: vi.fn(),
 }));
 
+vi.mock("@/modules/ai/jobs/enqueue", () => ({
+  enqueueAiExecutionJob: vi.fn(),
+}));
+
+vi.mock("@/modules/ai/jobs/schedule", () => ({
+  scheduleAiJobProcessing: vi.fn(),
+}));
+
+vi.mock("@/modules/ai/service", () => ({
+  processConversationMessage: vi.fn(),
+}));
+
+vi.mock("@/modules/channels/delivery/enqueue", () => ({
+  enqueueOutboundDeliveryIfExternal: vi.fn(),
+}));
+
 import { createClient } from "@/lib/supabase/server";
 import { requireOrgMembership } from "@/modules/organizations/queries";
 import { recordLeadActivity } from "@/modules/leads/activities/queries";
+import { enqueueAiExecutionJob } from "@/modules/ai/jobs/enqueue";
+import { scheduleAiJobProcessing } from "@/modules/ai/jobs/schedule";
+import { processConversationMessage } from "@/modules/ai/service";
+import { enqueueOutboundDeliveryIfExternal } from "@/modules/channels/delivery/enqueue";
 import {
   createConversation,
   updateConversation,
@@ -47,6 +67,8 @@ function makeConversation(overrides: Partial<Record<string, unknown>> = {}) {
     status: "open",
     requires_human: false,
     ai_paused_at: null,
+    channel_account_id: null,
+    channel_identity_id: null,
     created_at: "2026-08-20T10:00:00Z",
     updated_at: "2026-08-20T10:00:00Z",
     ...overrides,
@@ -63,6 +85,7 @@ function makeMessage(overrides: Partial<Record<string, unknown>> = {}) {
     direction: "outbound",
     body: "Hello",
     in_reply_to_message_id: null,
+    channel_identity_id: null,
     created_at: "2026-08-20T10:05:00Z",
     ...overrides,
   };
@@ -371,6 +394,11 @@ describe("createConversationMessage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(requireOrgMembership).mockResolvedValue({} as never);
+    vi.mocked(processConversationMessage).mockResolvedValue({
+      outcome: "responded",
+      messageId: "22222222-0000-4000-8000-0000000000bb",
+      activityId: "33333333-0000-4000-8000-0000000000cc",
+    });
   });
 
   it("throws TenantAccessError when the user is not a member", async () => {
@@ -406,6 +434,25 @@ describe("createConversationMessage", () => {
     expect(getCapturedInsert()?.organization_id).toBe(ORG_A);
     expect(getCapturedInsert()?.conversation_id).toBe(CONV_1);
     expect(getCapturedInsert()?.direction).toBe("outbound");
+  });
+
+  it("surfaces delivery enqueue failure after outbound persist without deleting the message", async () => {
+    const { getCapturedInsert } = mockForCreateMessage({
+      insertedMessage: makeMessage({ direction: "outbound" }),
+    });
+    vi.mocked(enqueueOutboundDeliveryIfExternal).mockRejectedValueOnce(
+      new Error("Failed to enqueue channel delivery job")
+    );
+
+    await expect(
+      createConversationMessage(ORG_A, USER_1, CONV_1, {
+        direction: "outbound",
+        body: "Hello",
+      })
+    ).rejects.toThrow("Failed to enqueue channel delivery job");
+
+    expect(getCapturedInsert()?.direction).toBe("outbound");
+    expect(getCapturedInsert()?.body).toBe("Hello");
   });
 
   it("creates an inbound message with the authenticated author", async () => {
@@ -506,6 +553,157 @@ describe("createConversationMessage", () => {
       body: "Hello",
     });
     expect(convUpdate).toHaveBeenCalled();
+  });
+});
+
+describe("createConversationMessage — automatic inbound AI trigger", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireOrgMembership).mockResolvedValue({} as never);
+    vi.mocked(recordLeadActivity).mockResolvedValue({} as never);
+    vi.mocked(enqueueAiExecutionJob).mockResolvedValue(undefined);
+  });
+
+  it("enqueues exactly one AI job after a persisted inbound message", async () => {
+    const inbound = makeMessage({ direction: "inbound" });
+    mockForCreateMessage({ insertedMessage: inbound });
+    const result = await createConversationMessage(ORG_A, USER_1, CONV_1, {
+      direction: "inbound",
+      body: "I am interested.",
+    });
+    expect(result.direction).toBe("inbound");
+    expect(enqueueAiExecutionJob).toHaveBeenCalledTimes(1);
+    expect(enqueueAiExecutionJob).toHaveBeenCalledWith({
+      organizationId: ORG_A,
+      userId: USER_1,
+      conversationId: CONV_1,
+      inboundMessageId: inbound.id,
+    });
+    expect(scheduleAiJobProcessing).toHaveBeenCalledTimes(1);
+    expect(processConversationMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not enqueue AI for a human outbound message", async () => {
+    mockForCreateMessage({
+      insertedMessage: makeMessage({ direction: "outbound" }),
+    });
+    await createConversationMessage(ORG_A, USER_1, CONV_1, {
+      direction: "outbound",
+      body: "Hello",
+    });
+    expect(enqueueAiExecutionJob).not.toHaveBeenCalled();
+    expect(processConversationMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not enqueue AI for an invalid message", async () => {
+    await expect(
+      createConversationMessage(ORG_A, USER_1, CONV_1, {
+        direction: "inbound",
+        body: "",
+      })
+    ).rejects.toThrow(ValidationError);
+    expect(enqueueAiExecutionJob).not.toHaveBeenCalled();
+    expect(processConversationMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not enqueue AI for a cross-tenant conversation", async () => {
+    mockForCreateMessage({ conversationRow: null });
+    await expect(
+      createConversationMessage(ORG_A, USER_1, CONV_1, {
+        direction: "inbound",
+        body: "Hello from the other side",
+      })
+    ).rejects.toThrow(NotFoundError);
+    expect(enqueueAiExecutionJob).not.toHaveBeenCalled();
+    expect(processConversationMessage).not.toHaveBeenCalled();
+  });
+
+  it("still enqueues after inbound persist when later eligibility may skip", async () => {
+    mockForCreateMessage({
+      insertedMessage: makeMessage({ direction: "inbound" }),
+    });
+    const result = await createConversationMessage(ORG_A, USER_1, CONV_1, {
+      direction: "inbound",
+      body: "Are you there?",
+    });
+    expect(result.direction).toBe("inbound");
+    expect(enqueueAiExecutionJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("still enqueues after inbound persist when later eligibility may escalate", async () => {
+    mockForCreateMessage({
+      insertedMessage: makeMessage({ direction: "inbound" }),
+    });
+    await createConversationMessage(ORG_A, USER_1, CONV_1, {
+      direction: "inbound",
+      body: "I want to complain",
+    });
+    expect(enqueueAiExecutionJob).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the persisted inbound message without waiting for the LLM", async () => {
+    mockForCreateMessage({
+      insertedMessage: makeMessage({ direction: "inbound" }),
+    });
+    const result = await createConversationMessage(ORG_A, USER_1, CONV_1, {
+      direction: "inbound",
+      body: "Hello?",
+    });
+    expect(result.direction).toBe("inbound");
+    expect(processConversationMessage).not.toHaveBeenCalled();
+  });
+
+  it("keeps the inbound message when queue insertion fails", async () => {
+    vi.mocked(enqueueAiExecutionJob).mockRejectedValue(new Error("queue down"));
+    const inbound = makeMessage({
+      id: "11111111-0000-4000-8000-0000000000aa",
+      direction: "inbound",
+    });
+    mockForCreateMessage({ insertedMessage: inbound });
+    const result = await createConversationMessage(ORG_A, USER_1, CONV_1, {
+      direction: "inbound",
+      body: "Still interested",
+    });
+    expect(result.id).toBe(inbound.id);
+    expect(result.direction).toBe("inbound");
+    expect(recordLeadActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ content: "Inbound message received" })
+    );
+    expect(recordLeadActivity).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "ai" })
+    );
+    expect(processConversationMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not let a client trigger_ai flag control enqueue identity", async () => {
+    mockForCreateMessage({
+      insertedMessage: makeMessage({ direction: "inbound" }),
+    });
+    await createConversationMessage(ORG_A, USER_1, CONV_1, {
+      direction: "inbound",
+      body: "Hello",
+      trigger_ai: false,
+      actor_type: "ai",
+      organization_id: ORG_B,
+    });
+    expect(enqueueAiExecutionJob).toHaveBeenCalledWith({
+      organizationId: ORG_A,
+      userId: USER_1,
+      conversationId: CONV_1,
+      inboundMessageId: "11111111-0000-4000-8000-0000000000aa",
+    });
+  });
+
+  it("does not enqueue AI when inbound insert fails", async () => {
+    mockForCreateMessage({ insertError: { message: "insert failed" } });
+    await expect(
+      createConversationMessage(ORG_A, USER_1, CONV_1, {
+        direction: "inbound",
+        body: "Hello",
+      })
+    ).rejects.toThrow(/Failed to create message/);
+    expect(enqueueAiExecutionJob).not.toHaveBeenCalled();
+    expect(processConversationMessage).not.toHaveBeenCalled();
   });
 });
 

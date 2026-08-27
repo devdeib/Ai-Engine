@@ -30,6 +30,8 @@ import { ActivityTimeline } from "@/modules/leads/activities/components/activity
 import { LeadConversationCard } from "@/modules/conversations/components/lead-conversation-card";
 import { FollowUpList } from "@/modules/follow-ups/components/follow-up-list";
 import { AppointmentList } from "@/modules/appointments/components/appointment-list";
+import { PendingAiActionsPanel } from "@/modules/ai/components/pending-ai-actions-panel";
+import { AiOperatorInsightPanel } from "@/modules/ai/components/ai-operator-insight-panel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -122,6 +124,7 @@ export function LeadDetailClient({
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [members, setMembers] = useState<OrgMemberOption[]>([]);
+  const [hitlRefreshKey, setHitlRefreshKey] = useState(0);
 
   const fetchLead = useCallback(async () => {
     setIsLoading(true);
@@ -448,6 +451,18 @@ export function LeadDetailClient({
           <LeadConversationCard
             organizationId={organizationId}
             leadId={leadId}
+          />
+
+          <AiOperatorInsightPanel
+            organizationId={organizationId}
+            leadId={leadId}
+            onAppointmentRequested={() => setHitlRefreshKey((key) => key + 1)}
+          />
+
+          <PendingAiActionsPanel
+            organizationId={organizationId}
+            leadId={leadId}
+            refreshKey={hitlRefreshKey}
           />
 
           <FollowUpList

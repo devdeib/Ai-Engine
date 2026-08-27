@@ -1,16 +1,32 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
-import { Bot } from "lucide-react";
-import { ComingSoon } from "@/components/shared/coming-soon";
+import { getUserOrganizations } from "@/modules/auth/queries";
+import { AiActionCenter } from "@/modules/ai/components/ai-action-center";
+import { Card, CardContent } from "@/components/ui/card";
 
-export const metadata: Metadata = { title: "AI Agent" };
+export const metadata: Metadata = { title: "AI Action Center" };
 
-export default function AIAgentPage() {
+export default async function AIAgentPage() {
+  const organizations = await getUserOrganizations();
+  const currentOrg = organizations[0] ?? null;
+
+  if (!currentOrg) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-muted-foreground">
+            No organization found. Please contact support.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <ComingSoon
-      title="AI Sales Agent"
-      description="An AI agent that qualifies leads, answers property questions, and schedules viewings — with human handoff for sensitive decisions."
-      icon={Bot}
-      phase="Phase 4"
-    />
+    <Suspense
+      fallback={<div className="h-24 rounded-md bg-muted animate-pulse" />}
+    >
+      <AiActionCenter organizationId={currentOrg.id} />
+    </Suspense>
   );
 }

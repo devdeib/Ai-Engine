@@ -267,6 +267,7 @@ describe("createAppointment — field injection", () => {
     expect(payload?.lead_id).toBe(LEAD_1);
     expect(payload).not.toHaveProperty("user_id");
     expect(payload).not.toHaveProperty("status");
+    expect(payload).not.toHaveProperty("idempotency_key");
   });
 
   it("returns the created appointment", async () => {
@@ -277,6 +278,56 @@ describe("createAppointment — field injection", () => {
       organization_id: ORG_A,
       status: "scheduled",
     });
+  });
+
+  it("replays an existing appointment on idempotency unique violation", async () => {
+    const existing = makeAppointment();
+    const leadSingle = vi.fn().mockResolvedValue({
+      data: { id: LEAD_1 },
+      error: null,
+    });
+    const insertSingle = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "23505", message: "duplicate key" },
+    });
+    const existingSingle = vi.fn().mockResolvedValue({ data: existing, error: null });
+
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "leads") {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({ single: leadSingle }),
+              }),
+            }),
+          };
+        }
+        if (table === "appointments") {
+          return {
+            insert: () => ({
+              select: () => ({ single: insertSingle }),
+            }),
+            select: () => ({
+              eq: () => ({
+                eq: () => ({ single: existingSingle }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    const result = await createAppointment(
+      ORG_A,
+      USER_1,
+      LEAD_1,
+      validCreate(),
+      { idempotencyKey: "action-1" }
+    );
+    expect(result.id).toBe(APPT_1);
+    expect(recordLeadActivity).not.toHaveBeenCalled();
   });
 });
 

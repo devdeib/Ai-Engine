@@ -46,6 +46,43 @@ export async function requireOrgMembership(
 }
 
 /**
+ * Operator paths keep requireOrgMembership.
+ * channel_ingress trusted execution passes null and must still scope by organization_id.
+ * Never invent a fake user or membership row.
+ */
+export async function requireOrgMembershipIfPresent(
+  organizationId: string,
+  userId: string | null
+): Promise<OrganizationMember | null> {
+  if (userId === null) {
+    return null;
+  }
+  return requireOrgMembership(organizationId, userId);
+}
+
+/**
+ * Trusted AI execution may load the organization name without a member role.
+ * Callers must already have validated tenant scope (worker or membership).
+ */
+export async function getOrganizationName(
+  organizationId: string
+): Promise<string> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("name")
+    .eq("id", organizationId)
+    .is("deleted_at", null)
+    .single();
+
+  if (error || !data) {
+    throw new NotFoundError("Organization");
+  }
+
+  return (data as Organization).name;
+}
+
+/**
  * Verifies the user has one of the required roles in the organization.
  * Throws TenantAccessError if they do not.
  */

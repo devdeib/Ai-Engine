@@ -109,11 +109,13 @@ export async function assertFollowUpInOrg(
  */
 export async function listLeadFollowUps(
   organizationId: string,
-  userId: string,
+  userId: string | null,
   leadId: string,
   pagination: FollowUpsPagination = { page: 1, limit: 20 }
 ): Promise<LeadFollowUp[]> {
-  await requireOrgMembership(organizationId, userId);
+  if (userId !== null) {
+    await requireOrgMembership(organizationId, userId);
+  }
 
   const supabase = await createClient();
   await assertLeadInOrg(supabase, leadId, organizationId);

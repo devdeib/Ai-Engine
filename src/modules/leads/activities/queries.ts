@@ -27,7 +27,7 @@ import type { LeadActivity, LeadActivityType } from "@/lib/db/types";
 
 export interface RecordLeadActivityParams {
   organizationId: string;
-  userId: string;
+  userId: string | null;
   leadId: string;
   type: LeadActivityType;
   content: string;
@@ -79,11 +79,13 @@ async function assertLeadInOrg(
  */
 export async function listLeadActivities(
   organizationId: string,
-  userId: string,
+  userId: string | null,
   leadId: string,
   pagination: ActivitiesPagination = { page: 1, limit: 20 }
 ): Promise<LeadActivity[]> {
-  await requireOrgMembership(organizationId, userId);
+  if (userId !== null) {
+    await requireOrgMembership(organizationId, userId);
+  }
 
   const supabase = await createClient();
   await assertLeadInOrg(supabase, leadId, organizationId);
@@ -126,7 +128,9 @@ export async function recordLeadActivity(
   params: RecordLeadActivityParams
 ): Promise<LeadActivity> {
   const { organizationId, userId, leadId } = params;
-  await requireOrgMembership(organizationId, userId);
+  if (userId !== null) {
+    await requireOrgMembership(organizationId, userId);
+  }
 
   const parsed = recordActivitySchema.safeParse({
     type: params.type,

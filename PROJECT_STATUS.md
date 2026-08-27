@@ -1,7 +1,14 @@
 # PROJECT_STATUS.md — Virtual Gravity AI Sales Engine
 
-> Last updated: 2026-08-19
-> Phase: Pre-initialization (0 — Empty Repository)
+> **Live status (2026-08-27): Phase 5.3A Email contract/scaffold.**
+> WhatsApp Cloud API is text-only. Email is structurally registered (Resend)
+> but live send/receive HTTP is Phase 5.3B. SMS, media, templates, and receipts
+> are not implemented. Channel delivery is at-least-once (not exactly-once).
+> The numbered sections below are the original pre-initialization snapshot and
+> are not a live inventory of the repository.
+
+> Last updated: 2026-08-27
+> Phase: 5.3A (Email contract + adapter scaffold)
 
 ---
 
@@ -83,7 +90,8 @@ Everything. The following is the complete product backlog at this point:
 
 ### Communication Channels (Phase 5)
 - [ ] Email integration
-- [ ] WhatsApp integration (Business API)
+- [x] WhatsApp integration (Business API) — Phase 5.2B text-only Cloud API. Media, templates, receipts, and SMS are out of scope.
+- [ ] Email integration — Phase 5.3A locked Resend contract + scaffold; live send/receive is 5.3B.
 
 ### Analytics & Billing (Phase 6)
 - [ ] Analytics dashboard (leads funnel, conversion rates, agent performance)

@@ -23,6 +23,14 @@ import { recordLeadActivity } from "@/modules/leads/activities/queries";
 import { appointmentActivityContent } from "@/modules/leads/activities/activity-content";
 import type { Appointment } from "@/lib/db/types";
 
+function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "23505" ||
+    /duplicate key|unique constraint/i.test(error.message ?? "")
+  );
+}
+
 async function assertAssigneeInOrg(
   organizationId: string,
   assignedUserId: string | null | undefined
@@ -52,7 +60,8 @@ export async function createAppointment(
   organizationId: string,
   userId: string,
   leadId: string,
-  input: unknown
+  input: unknown,
+  options?: { idempotencyKey?: string }
 ): Promise<Appointment> {
   await requireOrgMembership(organizationId, userId);
 
@@ -69,19 +78,36 @@ export async function createAppointment(
   const supabase = await createClient();
   await assertLeadInOrg(supabase, leadId, organizationId);
 
+  const insertPayload: Record<string, unknown> = {
+    organization_id: organizationId,
+    lead_id: leadId,
+    starts_at: parsed.data.starts_at,
+    ends_at: parsed.data.ends_at ?? null,
+    location: parsed.data.location ?? null,
+    notes: parsed.data.notes ?? null,
+    assigned_user_id: parsed.data.assigned_user_id ?? null,
+  };
+  if (options?.idempotencyKey) {
+    insertPayload.idempotency_key = options.idempotencyKey;
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from("appointments") as any)
-    .insert({
-      organization_id: organizationId,
-      lead_id: leadId,
-      starts_at: parsed.data.starts_at,
-      ends_at: parsed.data.ends_at ?? null,
-      location: parsed.data.location ?? null,
-      notes: parsed.data.notes ?? null,
-      assigned_user_id: parsed.data.assigned_user_id ?? null,
-    })
+    .insert(insertPayload)
     .select()
     .single();
+
+  if (isUniqueViolation(error) && options?.idempotencyKey) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = await (supabase.from("appointments") as any)
+      .select()
+      .eq("organization_id", organizationId)
+      .eq("idempotency_key", options.idempotencyKey)
+      .single();
+    if (existing.data) {
+      return existing.data as Appointment;
+    }
+  }
 
   if (error || !data) {
     throw new Error(`Failed to create appointment: ${error?.message}`);

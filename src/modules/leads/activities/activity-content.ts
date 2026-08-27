@@ -51,3 +51,15 @@ export function aiResumedContent(): string {
 export function aiEscalatedContent(): string {
   return "Escalated to human";
 }
+
+export function aiAppointmentApprovalRequestedContent(): string {
+  return "AI requested an appointment approval.";
+}
+
+export function aiAppointmentRequestRejectedContent(): string {
+  return "AI appointment request rejected.";
+}
+
+export function aiAppointmentRequestExpiredContent(): string {
+  return "AI appointment request expired.";
+}

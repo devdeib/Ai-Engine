@@ -292,6 +292,7 @@ describe("createLeadFollowUp — field injection", () => {
     expect(payload?.lead_id).toBe(LEAD_1);
     expect(payload).not.toHaveProperty("user_id");
     expect(payload).not.toHaveProperty("created_by");
+    expect(payload).not.toHaveProperty("idempotency_key");
   });
 
   it("does not let the client set status on create", async () => {
@@ -317,6 +318,54 @@ describe("createLeadFollowUp — field injection", () => {
       lead_id: LEAD_1,
       status: "pending",
     });
+  });
+
+  it("replays an existing row on idempotency unique violation without a second activity", async () => {
+    const existing = makeFollowUp();
+    const leadSingle = vi.fn().mockResolvedValue({
+      data: { id: LEAD_1 },
+      error: null,
+    });
+    const insertSingle = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: "23505", message: "duplicate key" },
+    });
+    const existingSingle = vi.fn().mockResolvedValue({ data: existing, error: null });
+    const existingEqKey = vi.fn().mockReturnValue({ single: existingSingle });
+    const existingEqOrg = vi.fn().mockReturnValue({ eq: existingEqKey });
+
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "leads") {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({ single: leadSingle }),
+              }),
+            }),
+          };
+        }
+        if (table === "lead_follow_ups") {
+          return {
+            insert: () => ({
+              select: () => ({ single: insertSingle }),
+            }),
+            select: () => ({ eq: existingEqOrg }),
+          };
+        }
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    const result = await createLeadFollowUp(
+      ORG_A,
+      USER_1,
+      LEAD_1,
+      validCreate(),
+      { idempotencyKey: "action-1" }
+    );
+    expect(result.id).toBe(FU_1);
+    expect(recordLeadActivity).not.toHaveBeenCalled();
   });
 });
 

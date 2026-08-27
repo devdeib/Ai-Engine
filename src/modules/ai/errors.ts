@@ -17,3 +17,21 @@ export class AiMalformedResponseError extends AppError {
     this.name = "AiMalformedResponseError";
   }
 }
+
+export type AiToolErrorCode =
+  | "AI_UNKNOWN_TOOL"
+  | "AI_TOOL_INVALID_ARGUMENTS"
+  | "AI_TOOL_NOT_FOUND"
+  | "AI_TOOL_LIMIT_EXCEEDED"
+  | "AI_TOOL_FAILED"
+  | "AI_TOOL_REJECTED";
+
+export class AiToolError extends AppError {
+  constructor(
+    code: AiToolErrorCode,
+    message = "The AI tool request could not be completed."
+  ) {
+    super(code, message, code === "AI_TOOL_LIMIT_EXCEEDED" ? 422 : 502);
+    this.name = "AiToolError";
+  }
+}
