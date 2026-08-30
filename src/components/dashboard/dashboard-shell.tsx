@@ -7,6 +7,7 @@ import {
   Users,
   Building2,
   MessageSquare,
+  Smartphone,
   Clock,
   CalendarDays,
   Bot,
@@ -54,6 +55,12 @@ const navItems: NavItem[] = [
     label: "Conversations",
     href: "/dashboard/conversations",
     icon: MessageSquare,
+    implemented: true,
+  },
+  {
+    label: "Channel Identities",
+    href: "/dashboard/identities",
+    icon: Smartphone,
     implemented: true,
   },
   {

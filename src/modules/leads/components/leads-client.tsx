@@ -72,6 +72,7 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
   const currentStatus = searchParams.get("status") ?? "";
   const currentSource = searchParams.get("source") ?? "";
   const currentOwner = searchParams.get("owner_id") ?? "";
+  const hideChannelStubs = searchParams.get("exclude_channel_stubs") === "true";
   const currentSortBy = searchParams.get("sortBy") ?? "created_at";
   const currentSortOrder = searchParams.get("sortOrder") ?? "desc";
   const currentPage = Math.max(
@@ -206,6 +207,7 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
       if (currentStatus) params.set("status", currentStatus);
       if (currentSource) params.set("source", currentSource);
       if (currentOwner) params.set("owner_id", currentOwner);
+      if (hideChannelStubs) params.set("exclude_channel_stubs", "true");
       if (currentSortBy !== "created_at") params.set("sortBy", currentSortBy);
       if (currentSortOrder !== "desc") params.set("sortOrder", currentSortOrder);
 
@@ -234,6 +236,7 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
     currentStatus,
     currentSource,
     currentOwner,
+    hideChannelStubs,
     currentSortBy,
     currentSortOrder,
     refreshKey,
@@ -274,6 +277,7 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
       currentStatus ||
       currentSource ||
       currentOwner ||
+      hideChannelStubs ||
       currentSortBy !== "created_at" ||
       currentSortOrder !== "desc"
   );
@@ -364,6 +368,21 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
             </option>
           ))}
         </select>
+
+        <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={hideChannelStubs}
+            onChange={(e) =>
+              updateFilters({
+                exclude_channel_stubs: e.target.checked ? "true" : null,
+              })
+            }
+            className="h-4 w-4 accent-primary"
+            aria-label="Hide channel stubs"
+          />
+          Hide channel stubs
+        </label>
 
         {/* Sort */}
         <select

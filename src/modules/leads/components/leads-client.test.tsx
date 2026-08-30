@@ -654,3 +654,80 @@ describe("LeadsClient — owner filter bar", () => {
     });
   });
 });
+
+describe("LeadsClient — hide channel stubs", () => {
+  it("omits exclude_channel_stubs from the fetch by default", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(makeEmptyLeadsResponse() as Response);
+
+    render(<LeadsClient organizationId={ORG_A} />);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    const leadCall = vi.mocked(global.fetch).mock.calls.find(
+      ([url]) => typeof url === "string" && url.includes("/leads")
+    );
+    expect(leadCall?.[0]).not.toContain("exclude_channel_stubs");
+  });
+
+  it("sends exclude_channel_stubs=true when the control is enabled in the URL", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      mockParams({ exclude_channel_stubs: "true" })
+    );
+    vi.mocked(global.fetch).mockResolvedValue(makeEmptyLeadsResponse() as Response);
+
+    render(<LeadsClient organizationId={ORG_A} />);
+
+    expect(
+      await screen.findByRole("checkbox", { name: "Hide channel stubs" })
+    ).toBeChecked();
+    await waitFor(() => {
+      const leadCall = vi.mocked(global.fetch).mock.calls.find(
+        ([url]) => typeof url === "string" && url.includes("/leads")
+      );
+      expect(leadCall?.[0]).toContain("exclude_channel_stubs=true");
+    });
+  });
+
+  it("calls router.replace with exclude_channel_stubs=true when checked", async () => {
+    const replace = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(global.fetch).mockResolvedValue(makeEmptyLeadsResponse() as Response);
+
+    render(<LeadsClient organizationId={ORG_A} />);
+    const user = userEvent.setup();
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Hide channel stubs",
+    });
+    await user.click(checkbox);
+
+    expect(replace).toHaveBeenCalledWith(
+      expect.stringContaining("exclude_channel_stubs=true")
+    );
+  });
+
+  it("omits exclude_channel_stubs when the control is unchecked", async () => {
+    const replace = vi.fn();
+    vi.mocked(useSearchParams).mockReturnValue(
+      mockParams({ exclude_channel_stubs: "true" })
+    );
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace,
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(global.fetch).mockResolvedValue(makeEmptyLeadsResponse() as Response);
+
+    render(<LeadsClient organizationId={ORG_A} />);
+    const user = userEvent.setup();
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Hide channel stubs",
+    });
+    expect(checkbox).toBeChecked();
+    await user.click(checkbox);
+
+    expect(replace).toHaveBeenCalled();
+    const url = String(replace.mock.calls[0]?.[0]);
+    expect(url).not.toContain("exclude_channel_stubs");
+  });
+});

@@ -1,0 +1,52 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import React from "react";
+import type { OrganizationWithRole, Profile } from "@/lib/db/types";
+
+vi.mock("next/navigation", () => ({
+  usePathname: vi.fn(() => "/dashboard/identities"),
+}));
+
+vi.mock("@/modules/auth/actions", () => ({
+  signOutAction: vi.fn(),
+}));
+
+import { DashboardShell } from "./dashboard-shell";
+
+const profile: Profile = {
+  id: "00000000-0000-4000-8000-000000000001",
+  display_name: "Agent User",
+  avatar_url: null,
+  created_at: "2026-08-20T00:00:00Z",
+  updated_at: "2026-08-20T00:00:00Z",
+};
+
+const organization: OrganizationWithRole = {
+  id: "aaaaaaaa-0000-0000-0000-000000000001",
+  name: "Acme Realty",
+  slug: "acme",
+  created_at: "2026-08-20T00:00:00Z",
+  updated_at: "2026-08-20T00:00:00Z",
+  deleted_at: null,
+  role: "agent",
+};
+
+describe("DashboardShell navigation", () => {
+  it("includes a Channel Identities item pointing at /dashboard/identities", () => {
+    render(
+      <DashboardShell
+        profile={profile}
+        organizations={[organization]}
+        currentOrganization={organization}
+      >
+        <div>content</div>
+      </DashboardShell>
+    );
+
+    const links = screen.getAllByRole("link", { name: "Channel Identities" });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", "/dashboard/identities");
+    }
+  });
+});
