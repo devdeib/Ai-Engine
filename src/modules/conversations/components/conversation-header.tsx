@@ -12,11 +12,21 @@ import {
   leadDisplayName,
 } from "@/modules/conversations/lib/conversation-labels";
 
+export type InboxIdentityStatus = "hidden" | "loading" | "ready" | "unavailable";
+export type InboxIdentityLinkState = "linked" | "unmatched";
+
+export interface ConversationHeaderIdentity {
+  status: InboxIdentityStatus;
+  externalAddress: string | null;
+  linkState: InboxIdentityLinkState | null;
+}
+
 export interface ConversationHeaderProps {
   conversation: ConversationWithLead;
   isUpdating: boolean;
   onBack: () => void;
   onToggleStatus: () => void;
+  identity?: ConversationHeaderIdentity;
 }
 
 export function ConversationHeader({
@@ -24,9 +34,13 @@ export function ConversationHeader({
   isUpdating,
   onBack,
   onToggleStatus,
+  identity = { status: "hidden", externalAddress: null, linkState: null },
 }: ConversationHeaderProps) {
   const name = leadDisplayName(conversation.lead);
   const isOpen = conversation.status === "open";
+  const channelLabel = CONVERSATION_CHANNEL_LABELS[conversation.channel];
+  const showAddress =
+    identity.status === "ready" && Boolean(identity.externalAddress);
 
   return (
     <header className="flex items-start gap-2 border-b px-3 py-3 sm:px-4">
@@ -54,7 +68,15 @@ export function ConversationHeader({
           </span>
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {CONVERSATION_CHANNEL_LABELS[conversation.channel]}
+          {channelLabel}
+          {showAddress ? (
+            <>
+              <span aria-hidden="true"> · </span>
+              <span data-testid="inbox-identity-address">
+                {identity.externalAddress}
+              </span>
+            </>
+          ) : null}
           {conversation.lead ? (
             <>
               <span aria-hidden="true"> · </span>
@@ -67,6 +89,23 @@ export function ConversationHeader({
             </>
           ) : null}
         </p>
+        {identity.status === "loading" ||
+        identity.status === "unavailable" ||
+        (identity.status === "ready" && identity.linkState) ? (
+          <p
+            className="mt-0.5 text-xs text-muted-foreground"
+            data-testid="inbox-identity-state"
+            aria-live="polite"
+          >
+            {identity.status === "loading"
+              ? "Loading identity…"
+              : identity.status === "unavailable"
+                ? "Identity unavailable"
+                : identity.linkState === "unmatched"
+                  ? "Identity: Unmatched"
+                  : "Identity: Linked"}
+          </p>
+        ) : null}
       </div>
 
       <Button

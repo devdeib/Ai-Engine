@@ -35,6 +35,7 @@ vi.mock("@/modules/ai/components/ai-operator-insight-panel", () => ({
 const ORG_A = "aaaaaaaa-0000-0000-0000-000000000001";
 const LEAD_1 = "11111111-1111-4111-8111-111111111111";
 const CONV_1 = "cccccccc-0000-4000-8000-000000000001";
+const IDENTITY_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 function makeConversation(
   overrides: Partial<ConversationWithLead> = {}
@@ -315,5 +316,230 @@ describe("ConversationThread", () => {
       .mock.calls.filter((call) => String(call[0]).includes("/messages"))
       .filter((call) => ((call[1] as RequestInit | undefined)?.method ?? "GET") !== "POST");
     expect(getCalls.length).toBeGreaterThan(1);
+  });
+
+  it("does not request identity APIs for in-app conversations", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      ok([], { page: 1, limit: 20, count: 0 })
+    ) as unknown as typeof fetch;
+
+    render(
+      <ConversationThread
+        organizationId={ORG_A}
+        conversation={makeConversation()}
+        onBack={vi.fn()}
+        onConversationUpdated={vi.fn()}
+        onListRefresh={vi.fn()}
+      />
+    );
+
+    await screen.findByText("No messages yet");
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("/channel-identities/"))).toBe(false);
+    expect(urls.some((url) => url.includes("/leads/"))).toBe(false);
+    expect(urls.some((url) => url.includes("secret") || url.includes("rotate"))).toBe(
+      false
+    );
+    expect(screen.queryByTestId("inbox-identity-state")).not.toBeInTheDocument();
+  });
+
+  it("loads WhatsApp identity address and marks a real lead as Linked", async () => {
+    global.fetch = vi.fn().mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("secret") || url.includes("rotate")) {
+        throw new Error("secret endpoints must not be requested");
+      }
+      if (url.includes(`/channel-identities/${IDENTITY_ID}`)) {
+        return ok({
+          id: IDENTITY_ID,
+          organizationId: ORG_A,
+          channelAccountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          externalAddress: "+97455551234",
+          leadId: LEAD_1,
+          createdAt: "2026-08-01T10:00:00Z",
+        });
+      }
+      if (url.includes(`/leads/${LEAD_1}`)) {
+        return ok({
+          id: LEAD_1,
+          first_name: "Ahmed",
+          last_name: "Hassan",
+          email: "ahmed@example.com",
+          phone: "+97455551234",
+        });
+      }
+      if (url.includes("/messages")) {
+        return ok([], { page: 1, limit: 20, count: 0 });
+      }
+      throw new Error(`unexpected ${url}`);
+    }) as unknown as typeof fetch;
+
+    render(
+      <ConversationThread
+        organizationId={ORG_A}
+        conversation={makeConversation({
+          channel: "whatsapp",
+          channel_identity_id: IDENTITY_ID,
+          lead: {
+            id: LEAD_1,
+            first_name: "Ahmed",
+            last_name: "Hassan",
+            company_name: null,
+          },
+        })}
+        onBack={vi.fn()}
+        onConversationUpdated={vi.fn()}
+        onListRefresh={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByTestId("inbox-identity-address")).toHaveTextContent(
+      "+97455551234"
+    );
+    expect(screen.getByTestId("inbox-identity-state")).toHaveTextContent(
+      "Identity: Linked"
+    );
+    expect(screen.getByText("Ahmed Hassan")).toBeInTheDocument();
+    expect(screen.getByText("No messages yet")).toBeInTheDocument();
+  });
+
+  it("marks a channel stub lead as Unmatched", async () => {
+    global.fetch = vi.fn().mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes(`/channel-identities/${IDENTITY_ID}`)) {
+        return ok({
+          id: IDENTITY_ID,
+          externalAddress: "+97455551234",
+          leadId: LEAD_1,
+        });
+      }
+      if (url.includes(`/leads/${LEAD_1}`)) {
+        return ok({
+          id: LEAD_1,
+          first_name: "Unknown",
+          last_name: "Customer",
+          email: null,
+          phone: null,
+        });
+      }
+      return ok([], { page: 1, limit: 20, count: 0 });
+    }) as unknown as typeof fetch;
+
+    render(
+      <ConversationThread
+        organizationId={ORG_A}
+        conversation={makeConversation({
+          channel: "whatsapp",
+          channel_identity_id: IDENTITY_ID,
+          lead: {
+            id: LEAD_1,
+            first_name: "Unknown",
+            last_name: "Customer",
+            company_name: null,
+          },
+        })}
+        onBack={vi.fn()}
+        onConversationUpdated={vi.fn()}
+        onListRefresh={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("Unknown Customer")).toBeInTheDocument();
+    expect(screen.getByTestId("inbox-identity-state")).toHaveTextContent(
+      "Identity: Unmatched"
+    );
+  });
+
+  it("shows identity unavailable when an external conversation has no identity", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      ok([], { page: 1, limit: 20, count: 0 })
+    ) as unknown as typeof fetch;
+
+    render(
+      <ConversationThread
+        organizationId={ORG_A}
+        conversation={makeConversation({
+          channel: "email",
+          channel_identity_id: null,
+        })}
+        onBack={vi.fn()}
+        onConversationUpdated={vi.fn()}
+        onListRefresh={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByTestId("inbox-identity-state")).toHaveTextContent(
+      "Identity unavailable"
+    );
+    expect(screen.queryByTestId("inbox-identity-address")).not.toBeInTheDocument();
+    expect(screen.getByText("No messages yet")).toBeInTheDocument();
+    const urls = vi.mocked(global.fetch).mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("/channel-identities/"))).toBe(false);
+  });
+
+  it("keeps the thread usable when identity lookup returns 404", async () => {
+    global.fetch = vi.fn().mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/channel-identities/")) {
+        return { ok: false, status: 404, json: async () => ({ error: { message: "missing" } }) };
+      }
+      if (url.includes("/leads/")) {
+        return ok({
+          id: LEAD_1,
+          first_name: "Ahmed",
+          last_name: "Hassan",
+          email: "ahmed@example.com",
+          phone: null,
+        });
+      }
+      return ok([], { page: 1, limit: 20, count: 0 });
+    }) as unknown as typeof fetch;
+
+    render(
+      <ConversationThread
+        organizationId={ORG_A}
+        conversation={makeConversation({
+          channel: "sms",
+          channel_identity_id: IDENTITY_ID,
+        })}
+        onBack={vi.fn()}
+        onConversationUpdated={vi.fn()}
+        onListRefresh={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByTestId("inbox-identity-state")).toHaveTextContent(
+      "Identity unavailable"
+    );
+    expect(screen.getByText("No messages yet")).toBeInTheDocument();
+    expect(screen.getByLabelText(/write a message/i)).toBeEnabled();
+  });
+
+  it("keeps the thread usable when identity lookup fails", async () => {
+    global.fetch = vi.fn().mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/channel-identities/")) {
+        return { ok: false, status: 500, json: async () => ({ error: { message: "fail" } }) };
+      }
+      return ok([], { page: 1, limit: 20, count: 0 });
+    }) as unknown as typeof fetch;
+
+    render(
+      <ConversationThread
+        organizationId={ORG_A}
+        conversation={makeConversation({
+          channel: "test",
+          channel_identity_id: IDENTITY_ID,
+        })}
+        onBack={vi.fn()}
+        onConversationUpdated={vi.fn()}
+        onListRefresh={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByTestId("inbox-identity-state")).toHaveTextContent(
+      "Identity unavailable"
+    );
+    expect(screen.getByText("No messages yet")).toBeInTheDocument();
   });
 });

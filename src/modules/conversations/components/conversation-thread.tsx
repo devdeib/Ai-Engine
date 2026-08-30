@@ -10,6 +10,12 @@ import { ConversationMessage } from "@/modules/conversations/components/conversa
 import { MessageComposer } from "@/modules/conversations/components/message-composer";
 import { PendingAiActionsPanel } from "@/modules/ai/components/pending-ai-actions-panel";
 import { AiOperatorInsightPanel } from "@/modules/ai/components/ai-operator-insight-panel";
+import { isExternalChannel } from "@/modules/channels/constants";
+import {
+  isChannelStubLead,
+  type ChannelStubLeadFields,
+} from "@/modules/channels/match";
+import type { ConversationHeaderIdentity } from "@/modules/conversations/components/conversation-header";
 
 const MESSAGE_PAGE_SIZE = 20;
 
@@ -58,6 +64,11 @@ export function ConversationThread({
   const [isUpdatingAi, setIsUpdatingAi] = useState(false);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [hitlRefreshKey, setHitlRefreshKey] = useState(0);
+  const [identity, setIdentity] = useState<ConversationHeaderIdentity>({
+    status: "hidden",
+    externalAddress: null,
+    linkState: null,
+  });
   const listRef = useRef<HTMLUListElement>(null);
 
   const fetchMessages = useCallback(async () => {
@@ -95,6 +106,111 @@ export function ConversationThread({
   useEffect(() => {
     void fetchMessages();
   }, [fetchMessages]);
+
+  useEffect(() => {
+    if (!isExternalChannel(conversation.channel)) {
+      setIdentity({ status: "hidden", externalAddress: null, linkState: null });
+      return;
+    }
+
+    const identityId = conversation.channel_identity_id;
+    if (!identityId) {
+      setIdentity({
+        status: "unavailable",
+        externalAddress: null,
+        linkState: null,
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setIdentity({
+      status: "loading",
+      externalAddress: null,
+      linkState: null,
+    });
+
+    async function loadIdentityContext() {
+      try {
+        const identityUrl = `/api/v1/organizations/${organizationId}/channel-identities/${identityId}`;
+        const leadUrl = conversation.lead_id
+          ? `/api/v1/organizations/${organizationId}/leads/${conversation.lead_id}`
+          : null;
+
+        const [identityRes, leadRes] = await Promise.all([
+          fetch(identityUrl, { credentials: "same-origin" }),
+          leadUrl
+            ? fetch(leadUrl, { credentials: "same-origin" })
+            : Promise.resolve(null),
+        ]);
+
+        if (cancelled) return;
+
+        if (!identityRes.ok) {
+          setIdentity({
+            status: "unavailable",
+            externalAddress: null,
+            linkState: null,
+          });
+          return;
+        }
+
+        const identityJson = (await identityRes.json()) as {
+          data?: { externalAddress?: unknown };
+        };
+        const externalAddress =
+          typeof identityJson.data?.externalAddress === "string" &&
+          identityJson.data.externalAddress.length > 0
+            ? identityJson.data.externalAddress
+            : null;
+
+        let linkState: ConversationHeaderIdentity["linkState"] = null;
+        if (leadRes?.ok) {
+          const leadJson = (await leadRes.json()) as { data?: ChannelStubLeadFields };
+          const lead = leadJson.data;
+          if (
+            lead &&
+            typeof lead.first_name === "string" &&
+            typeof lead.last_name === "string"
+          ) {
+            linkState = isChannelStubLead({
+              first_name: lead.first_name,
+              last_name: lead.last_name,
+              email: lead.email ?? null,
+              phone: lead.phone ?? null,
+            })
+              ? "unmatched"
+              : "linked";
+          }
+        }
+
+        setIdentity({
+          status: "ready",
+          externalAddress,
+          linkState,
+        });
+      } catch {
+        if (!cancelled) {
+          setIdentity({
+            status: "unavailable",
+            externalAddress: null,
+            linkState: null,
+          });
+        }
+      }
+    }
+
+    void loadIdentityContext();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    organizationId,
+    conversation.id,
+    conversation.channel,
+    conversation.channel_identity_id,
+    conversation.lead_id,
+  ]);
 
   useEffect(() => {
     setPage(1);
@@ -194,6 +310,7 @@ export function ConversationThread({
         isUpdating={isUpdatingStatus}
         onBack={onBack}
         onToggleStatus={() => void handleToggleStatus()}
+        identity={identity}
       />
 
       <ConversationAiControls
