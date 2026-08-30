@@ -2,8 +2,9 @@
  * GET  /api/v1/organizations/:organizationId/channel-accounts
  * POST /api/v1/organizations/:organizationId/channel-accounts
  *
- * Membership-gated. Test webhook secret is returned exactly once on create.
- * WhatsApp credentials are never returned.
+ * List/get are membership-gated. Create is owner/admin only.
+ * Test webhook secret is returned exactly once on create.
+ * WhatsApp/Email/SMS credentials are never returned.
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { handleApiError, successResponse } from "@/lib/api/response";
@@ -48,7 +49,10 @@ export async function POST(
 ): Promise<NextResponse> {
   return handleApiError(async () => {
     const { organizationId } = await context.params;
-    const { user } = await getOrgContext(req, organizationId);
+    const { user } = await getOrgContext(req, organizationId, [
+      "owner",
+      "admin",
+    ]);
     const body = await validateBody(req, createChannelAccountSchema);
     const account = await createChannelAccount(
       organizationId,

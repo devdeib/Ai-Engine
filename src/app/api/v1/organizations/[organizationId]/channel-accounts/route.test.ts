@@ -15,6 +15,9 @@ vi.mock("@/modules/channels/accounts", () => ({
   createChannelAccount: vi.fn(),
   createTestChannelAccount: vi.fn(),
   listChannelAccounts: vi.fn(),
+  getChannelAccount: vi.fn(),
+  updateChannelAccountStatus: vi.fn(),
+  rotateChannelAccountSecrets: vi.fn(),
 }));
 
 import { getOrgContext } from "@/lib/api/auth";
@@ -110,6 +113,84 @@ describe("organization channel-accounts", () => {
     expect(JSON.stringify(body)).not.toContain("provider_access_token");
     expect(JSON.stringify(body)).not.toContain("webhook_verify_token");
     expect(JSON.stringify(body)).not.toContain("access_token");
+    expect(getOrgContext).toHaveBeenCalledWith(expect.any(NextRequest), ORG_A);
+    expect(vi.mocked(getOrgContext).mock.calls[0]?.[2]).toBeUndefined();
+  });
+
+  it("allows an agent to list accounts", async () => {
+    vi.mocked(getOrgContext).mockResolvedValue({
+      ...mockOrgContext,
+      member: { ...mockMember, role: "agent" },
+    });
+    vi.mocked(listChannelAccounts).mockResolvedValue([]);
+    const req = new NextRequest(`http://localhost:3000${PATH}`);
+    const res = await GET(req, { params: Promise.resolve({ organizationId: ORG_A }) });
+    expect(res.status).toBe(200);
+    expect(getOrgContext).toHaveBeenCalledWith(expect.any(NextRequest), ORG_A);
+    expect(vi.mocked(getOrgContext).mock.calls[0]?.[2]).toBeUndefined();
+  });
+
+  it("requires owner or admin to create and returns 403 for an agent", async () => {
+    vi.mocked(getOrgContext).mockRejectedValue(new TenantAccessError());
+    const req = new NextRequest(`http://localhost:3000${PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider_destination_id: "dest-1" }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ organizationId: ORG_A }) });
+    expect(res.status).toBe(403);
+    expect(createChannelAccount).not.toHaveBeenCalled();
+  });
+
+  it("allows an owner to create", async () => {
+    vi.mocked(getOrgContext).mockResolvedValue(mockOrgContext);
+    vi.mocked(createChannelAccount).mockResolvedValue({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      organizationId: ORG_A,
+      channel: "test",
+      status: "active",
+      providerDestinationId: "dest-1",
+      createdAt: "2026-08-27T00:00:00Z",
+      webhookSecret: "s".repeat(64),
+    });
+    const req = new NextRequest(`http://localhost:3000${PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider_destination_id: "dest-1" }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ organizationId: ORG_A }) });
+    expect(res.status).toBe(201);
+    expect(getOrgContext).toHaveBeenCalledWith(expect.any(NextRequest), ORG_A, [
+      "owner",
+      "admin",
+    ]);
+  });
+
+  it("allows an admin to create", async () => {
+    vi.mocked(getOrgContext).mockResolvedValue({
+      ...mockOrgContext,
+      member: { ...mockMember, role: "admin" },
+    });
+    vi.mocked(createChannelAccount).mockResolvedValue({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      organizationId: ORG_A,
+      channel: "test",
+      status: "active",
+      providerDestinationId: "dest-1",
+      createdAt: "2026-08-27T00:00:00Z",
+      webhookSecret: "s".repeat(64),
+    });
+    const req = new NextRequest(`http://localhost:3000${PATH}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider_destination_id: "dest-1" }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ organizationId: ORG_A }) });
+    expect(res.status).toBe(201);
+    expect(getOrgContext).toHaveBeenCalledWith(expect.any(NextRequest), ORG_A, [
+      "owner",
+      "admin",
+    ]);
   });
 
   it("does not return WhatsApp secrets on create", async () => {

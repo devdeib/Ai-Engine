@@ -5,12 +5,17 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { requireOrgMembership } from "@/modules/organizations/queries";
+import {
+  requireOrgMembership,
+  requireOrgRole,
+} from "@/modules/organizations/queries";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { generateChannelWebhookSecret } from "@/modules/channels/hmac";
 import {
   createChannelAccountSchema,
+  parseChannelAccountRotateBody,
+  updateChannelAccountStatusSchema,
   type CreateChannelAccountInput,
 } from "@/modules/channels/schema";
 import {
@@ -23,12 +28,58 @@ import { normalizeEmailAddress } from "@/modules/channels/adapters/email/parse";
 import { normalizeSmsAddress } from "@/modules/channels/adapters/sms/parse";
 import type { ChannelAccount } from "@/lib/db/types";
 
+const CHANNEL_ACCOUNT_SELECT =
+  "id, organization_id, channel, status, provider_destination_id, created_by_user_id, created_at, updated_at";
+
+const OWNER_ADMIN_ROLES = ["owner", "admin"] as const;
+
 function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   return (
     error.code === "23505" ||
     /duplicate key|unique constraint/i.test(error.message ?? "")
   );
+}
+
+async function loadChannelAccountRow(
+  organizationId: string,
+  channelAccountId: string
+): Promise<ChannelAccount> {
+  const supabase = await createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase.from("channel_accounts") as any)
+    .select(CHANNEL_ACCOUNT_SELECT)
+    .eq("id", channelAccountId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new NotFoundError("Channel account");
+  }
+
+  return data as ChannelAccount;
+}
+
+function secretReplacementForRotation(
+  parsed: CreateChannelAccountInput,
+  generatedTestSecret: string | null
+): Record<string, string> {
+  if (parsed.channel === "test") {
+    return { webhook_secret: generatedTestSecret ?? "" };
+  }
+
+  if (parsed.channel === "whatsapp") {
+    return {
+      webhook_secret: parsed.app_secret ?? "",
+      provider_access_token: parsed.access_token?.trim() ?? "",
+      webhook_verify_token: parsed.webhook_verify_token?.trim() ?? "",
+    };
+  }
+
+  return {
+    webhook_secret: parsed.webhook_signing_secret ?? "",
+    provider_access_token: parsed.access_token?.trim() ?? "",
+  };
 }
 
 export async function createChannelAccount(
@@ -377,19 +428,106 @@ export async function getChannelAccount(
   channelAccountId: string
 ): Promise<ChannelAccountPublic> {
   await requireOrgMembership(organizationId, userId);
+  const account = await loadChannelAccountRow(organizationId, channelAccountId);
+  return toPublicChannelAccount(account);
+}
+
+export async function updateChannelAccountStatus(
+  organizationId: string,
+  userId: string,
+  channelAccountId: string,
+  input: unknown
+): Promise<ChannelAccountPublic> {
+  await requireOrgRole(organizationId, userId, [...OWNER_ADMIN_ROLES]);
+
+  const parsed = updateChannelAccountStatusSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new ValidationError(
+      "Validation failed",
+      parsed.error.flatten().fieldErrors
+    );
+  }
+
+  const existing = await loadChannelAccountRow(organizationId, channelAccountId);
+  if (existing.status === parsed.data.status) {
+    return toPublicChannelAccount(existing);
+  }
+
   const supabase = await createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from("channel_accounts") as any)
-    .select(
-      "id, organization_id, channel, status, provider_destination_id, created_by_user_id, created_at, updated_at"
-    )
+    .update({ status: parsed.data.status })
     .eq("id", channelAccountId)
     .eq("organization_id", organizationId)
+    .select(CHANNEL_ACCOUNT_SELECT)
     .maybeSingle();
 
-  if (error || !data) {
+  if (error) {
+    throw new Error("Failed to update channel account");
+  }
+  if (!data) {
     throw new NotFoundError("Channel account");
   }
 
   return toPublicChannelAccount(data as ChannelAccount);
+}
+
+export async function rotateChannelAccountSecrets(
+  organizationId: string,
+  userId: string,
+  channelAccountId: string,
+  body: unknown
+): Promise<ChannelAccountCreated | ChannelAccountPublic> {
+  await requireOrgRole(organizationId, userId, [...OWNER_ADMIN_ROLES]);
+
+  const account = await loadChannelAccountRow(organizationId, channelAccountId);
+  const parsed = parseChannelAccountRotateBody(
+    account.channel,
+    account.provider_destination_id,
+    body
+  );
+  if (!parsed.success) {
+    throw new ValidationError(
+      "Invalid channel account data",
+      parsed.error.fieldErrors
+    );
+  }
+
+  const generatedTestSecret =
+    account.channel === "test" ? generateChannelWebhookSecret() : null;
+  const replacement = secretReplacementForRotation(
+    parsed.data,
+    generatedTestSecret
+  );
+
+  const admin = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const secretUpdate = await (admin.from("channel_account_secrets") as any)
+    .update(replacement)
+    .eq("channel_account_id", channelAccountId)
+    .eq("organization_id", organizationId)
+    .select("channel_account_id")
+    .maybeSingle();
+
+  if (secretUpdate.error) {
+    logger.error("Failed to rotate channel account secret", {
+      organizationId,
+      code: secretUpdate.error.code ?? "INTERNAL_ERROR",
+    });
+    throw new Error("Failed to rotate channel account secret");
+  }
+
+  if (!secretUpdate.data) {
+    logger.error("Failed to rotate channel account secret", {
+      organizationId,
+      code: "CHANNEL_ACCOUNT_SECRET_MISSING",
+    });
+    throw new Error("Failed to rotate channel account secret");
+  }
+
+  if (account.channel === "test" && generatedTestSecret) {
+    return toCreatedChannelAccount(account, generatedTestSecret);
+  }
+
+  return toPublicChannelAccount(account);
 }

@@ -107,6 +107,97 @@ export const createChannelAccountSchema = z
     }
   });
 
+export const updateChannelAccountStatusSchema = z
+  .object({
+    status: z.enum(["active", "paused", "disabled"]),
+  })
+  .strict();
+
+const rotateTestChannelAccountSecretsSchema = z.object({}).strict();
+
+export const channelAccountIdParamsSchema = z.object({
+  channelAccountId: z.string().uuid("Channel account ID must be a valid UUID"),
+});
+
+type RotateParseFailure = {
+  success: false;
+  error: { fieldErrors: Record<string, string[] | undefined> };
+};
+
+type RotateParseSuccess = {
+  success: true;
+  data: CreateChannelAccountInput;
+};
+
+export type ChannelAccountRotateParseResult =
+  | RotateParseSuccess
+  | RotateParseFailure;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Full credential replacement. Channel and destination come from the stored
+ * row only — those keys in the body are always rejected.
+ */
+export function parseChannelAccountRotateBody(
+  channel: CreateChannelAccountInput["channel"],
+  providerDestinationId: string,
+  body: unknown
+): ChannelAccountRotateParseResult {
+  if (!isPlainObject(body)) {
+    return {
+      success: false,
+      error: { fieldErrors: { "": ["Request body must be an object"] } },
+    };
+  }
+
+  const fieldErrors: Record<string, string[]> = {};
+  if (Object.prototype.hasOwnProperty.call(body, "channel")) {
+    fieldErrors.channel = ["Channel cannot be changed during rotation"];
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "provider_destination_id")) {
+    fieldErrors.provider_destination_id = [
+      "Destination cannot be changed during rotation",
+    ];
+  }
+  if (Object.keys(fieldErrors).length > 0) {
+    return { success: false, error: { fieldErrors } };
+  }
+
+  if (channel === "test") {
+    const parsed = rotateTestChannelAccountSecretsSchema.safeParse(body);
+    if (!parsed.success) {
+      return {
+        success: false,
+        error: { fieldErrors: parsed.error.flatten().fieldErrors },
+      };
+    }
+    return {
+      success: true,
+      data: {
+        channel: "test",
+        provider_destination_id: providerDestinationId,
+      },
+    };
+  }
+
+  const parsed = createChannelAccountSchema.safeParse({
+    ...body,
+    channel,
+    provider_destination_id: providerDestinationId,
+  });
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: { fieldErrors: parsed.error.flatten().fieldErrors },
+    };
+  }
+
+  return { success: true, data: parsed.data };
+}
+
 export const listChannelAccountsQuerySchema = z.object({
   page: z.coerce
     .number()

@@ -290,6 +290,102 @@ describe("createChannelAccountSchema", () => {
   });
 });
 
+describe("updateChannelAccountStatusSchema", () => {
+  it("requires status and rejects extra keys", async () => {
+    const { updateChannelAccountStatusSchema } = await import(
+      "@/modules/channels/schema"
+    );
+    expect(
+      updateChannelAccountStatusSchema.safeParse({ status: "paused" }).success
+    ).toBe(true);
+    expect(updateChannelAccountStatusSchema.safeParse({}).success).toBe(false);
+    expect(
+      updateChannelAccountStatusSchema.safeParse({ status: "archived" }).success
+    ).toBe(false);
+    expect(
+      updateChannelAccountStatusSchema.safeParse({
+        status: "paused",
+        channel: "sms",
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe("parseChannelAccountRotateBody", () => {
+  it("accepts an empty Test body and rejects identity fields", async () => {
+    const { parseChannelAccountRotateBody } = await import(
+      "@/modules/channels/schema"
+    );
+    expect(parseChannelAccountRotateBody("test", "dest-1", {}).success).toBe(true);
+    expect(
+      parseChannelAccountRotateBody("test", "dest-1", { channel: "sms" }).success
+    ).toBe(false);
+    expect(
+      parseChannelAccountRotateBody("test", "dest-1", {
+        provider_destination_id: "other",
+      }).success
+    ).toBe(false);
+  });
+
+  it("reuses WhatsApp, Email, and SMS create credential rules", async () => {
+    const { parseChannelAccountRotateBody } = await import(
+      "@/modules/channels/schema"
+    );
+    expect(
+      parseChannelAccountRotateBody("whatsapp", "123456789012345", {
+        access_token: "EAAG." + "x".repeat(80),
+        webhook_verify_token: "verify",
+        app_secret: "s".repeat(32),
+      }).success
+    ).toBe(true);
+    expect(
+      parseChannelAccountRotateBody("email", "sales@acme.example", {
+        access_token: "re_" + "x".repeat(40),
+        webhook_signing_secret: `whsec_${"a".repeat(32)}`,
+      }).success
+    ).toBe(true);
+    expect(
+      parseChannelAccountRotateBody("email", "sales@acme.example", {
+        access_token: "re_" + "x".repeat(40),
+        webhook_signing_secret: "p".repeat(44),
+      }).success
+    ).toBe(false);
+    expect(
+      parseChannelAccountRotateBody("sms", "+17735550001", {
+        access_token: "KEY" + "t".repeat(40),
+        webhook_signing_secret: "p".repeat(44),
+      }).success
+    ).toBe(true);
+  });
+
+  it("rejects Email credentials on SMS and WhatsApp credentials on Email", async () => {
+    const { parseChannelAccountRotateBody } = await import(
+      "@/modules/channels/schema"
+    );
+    expect(
+      parseChannelAccountRotateBody("sms", "+17735550001", {
+        channel: "email",
+        provider_destination_id: "sales@acme.example",
+        access_token: "re_" + "x".repeat(40),
+        webhook_signing_secret: `whsec_${"a".repeat(32)}`,
+      }).success
+    ).toBe(false);
+    expect(
+      parseChannelAccountRotateBody("email", "sales@acme.example", {
+        access_token: "EAAG." + "x".repeat(80),
+        webhook_verify_token: "verify",
+        app_secret: "s".repeat(32),
+      }).success
+    ).toBe(false);
+    expect(
+      parseChannelAccountRotateBody("sms", "+17735550001", {
+        access_token: "",
+        webhook_signing_secret: "",
+      }).success
+    ).toBe(false);
+  });
+});
+
 describe("SMS adapter isolation", () => {
   const adapterFiles = [
     "src/modules/channels/adapters/sms/inbound.ts",

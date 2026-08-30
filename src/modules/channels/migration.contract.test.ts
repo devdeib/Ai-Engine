@@ -168,3 +168,46 @@ describe("SMS channel migration contract", () => {
     expect(email.toLowerCase()).not.toContain("'sms'");
   });
 });
+
+describe("channel account lifecycle RLS migration contract", () => {
+  const lifecycle = readFileSync(
+    resolve(
+      process.cwd(),
+      "supabase/migrations/20260830000001_channel_account_lifecycle_rls.sql"
+    ),
+    "utf8"
+  );
+
+  it("replaces only channel_accounts INSERT and UPDATE policies additively", () => {
+    expect(lifecycle).toContain(
+      'DROP POLICY IF EXISTS "channel_accounts: members can insert"'
+    );
+    expect(lifecycle).toContain(
+      'DROP POLICY IF EXISTS "channel_accounts: members can update"'
+    );
+    expect(lifecycle).toContain("IN ('owner', 'admin')");
+    expect(lifecycle).not.toContain(
+      'DROP POLICY IF EXISTS "channel_accounts: members can select"'
+    );
+    expect(lifecycle).not.toContain("CREATE TABLE");
+    expect(lifecycle).not.toContain("CREATE INDEX");
+    expect(lifecycle).not.toContain("CREATE FUNCTION");
+    expect(lifecycle).not.toContain("CREATE TYPE");
+    expect(lifecycle).not.toContain("ADD VALUE");
+    expect(lifecycle).not.toContain("channel_account_secrets");
+    expect(lifecycle).not.toContain("channel_identities");
+  });
+
+  it("leaves historical SELECT and secret policies unchanged", () => {
+    expect(substrate).toContain("channel_accounts: members can select");
+    expect(substrate).toContain("channel_accounts: members can insert");
+    expect(substrate).toContain("channel_accounts: members can update");
+    expect(substrate).toContain(
+      "No authenticated policies: members cannot read webhook secrets"
+    );
+    expect(substrate).not.toContain("owners and admins can insert");
+    expect(lifecycle).toContain("owners and admins can insert");
+    expect(lifecycle).toContain("owners and admins can update");
+    expect(lifecycle).not.toContain("DISABLE ROW LEVEL SECURITY");
+  });
+});
