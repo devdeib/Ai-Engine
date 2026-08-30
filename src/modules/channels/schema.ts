@@ -221,6 +221,16 @@ export const listChannelIdentitiesQuerySchema = listChannelAccountsQuerySchema.e
   }
 );
 
+export const channelIdentityIdParamsSchema = z.object({
+  channelIdentityId: z.string().uuid("Channel identity ID must be a valid UUID"),
+});
+
+export const attachChannelIdentityLeadSchema = z
+  .object({
+    leadId: z.string().uuid("Lead ID must be a valid UUID"),
+  })
+  .strict();
+
 export type CanonicalInbound = z.infer<typeof canonicalInboundSchema>;
 export type TestWebhookPayload = CanonicalInbound;
 export type CreateChannelAccountInput = z.infer<typeof createChannelAccountSchema>;

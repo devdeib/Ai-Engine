@@ -311,6 +311,57 @@ describe("updateChannelAccountStatusSchema", () => {
   });
 });
 
+describe("attachChannelIdentityLeadSchema", () => {
+  const leadId = "11111111-1111-4111-8111-111111111111";
+
+  it("accepts a valid leadId and rejects invalid bodies", async () => {
+    const { attachChannelIdentityLeadSchema } = await import(
+      "@/modules/channels/schema"
+    );
+
+    expect(
+      attachChannelIdentityLeadSchema.safeParse({ leadId }).success
+    ).toBe(true);
+    expect(attachChannelIdentityLeadSchema.safeParse({}).success).toBe(false);
+    expect(
+      attachChannelIdentityLeadSchema.safeParse({ leadId: null }).success
+    ).toBe(false);
+    expect(
+      attachChannelIdentityLeadSchema.safeParse({ leadId: "not-a-uuid" }).success
+    ).toBe(false);
+    expect(
+      attachChannelIdentityLeadSchema.safeParse({
+        leadId,
+        extra: true,
+      }).success
+    ).toBe(false);
+    expect(
+      attachChannelIdentityLeadSchema.safeParse({
+        leadId,
+        organizationId: "bbbbbbbb-0000-4000-8000-000000000002",
+      }).success
+    ).toBe(false);
+    expect(
+      attachChannelIdentityLeadSchema.safeParse({
+        leadId,
+        channelAccountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      }).success
+    ).toBe(false);
+    expect(
+      attachChannelIdentityLeadSchema.safeParse({
+        leadId,
+        externalAddress: "+9745550001",
+      }).success
+    ).toBe(false);
+    expect(
+      attachChannelIdentityLeadSchema.safeParse({
+        leadId,
+        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      }).success
+    ).toBe(false);
+  });
+});
+
 describe("parseChannelAccountRotateBody", () => {
   it("accepts an empty Test body and rejects identity fields", async () => {
     const { parseChannelAccountRotateBody } = await import(

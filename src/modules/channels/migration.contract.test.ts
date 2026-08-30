@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const enums = readFileSync(
@@ -209,5 +209,103 @@ describe("channel account lifecycle RLS migration contract", () => {
     expect(lifecycle).toContain("owners and admins can insert");
     expect(lifecycle).toContain("owners and admins can update");
     expect(lifecycle).not.toContain("DISABLE ROW LEVEL SECURITY");
+  });
+});
+
+describe("channel identity attach migration contract", () => {
+  const migrationsDir = resolve(process.cwd(), "supabase/migrations");
+  const attach = readFileSync(
+    resolve(migrationsDir, "20260830000002_channel_identity_attach.sql"),
+    "utf8"
+  );
+
+  it("adds exactly one Phase 5.6 migration without editing historical files", () => {
+    const files = readdirSync(migrationsDir).filter((name) =>
+      name.endsWith(".sql")
+    );
+    expect(
+      files.filter((name) => name.includes("channel_identity_attach"))
+    ).toEqual(["20260830000002_channel_identity_attach.sql"]);
+    expect(files).toContain("20260830000001_channel_account_lifecycle_rls.sql");
+    expect(substrate).toContain("channel_identities: members can select");
+    expect(attach).not.toContain(
+      'DROP POLICY IF EXISTS "channel_identities: members can select"'
+    );
+    expect(attach).not.toContain(
+      'DROP POLICY "channel_identities: members can select"'
+    );
+  });
+
+  it("adds member-level UPDATE RLS without INSERT or DELETE policies", () => {
+    expect(attach).toContain('CREATE POLICY "channel_identities: members can update"');
+    expect(attach).toContain("FOR UPDATE");
+    expect(attach).toContain(
+      "USING (public.auth_user_role_in_org(organization_id) IS NOT NULL)"
+    );
+    expect(attach).toContain(
+      "WITH CHECK (public.auth_user_role_in_org(organization_id) IS NOT NULL)"
+    );
+    expect(attach).not.toContain("IN ('owner', 'admin')");
+    expect(attach).not.toContain("FOR INSERT");
+    expect(attach).not.toContain("FOR DELETE");
+    expect(attach).not.toContain(
+      'CREATE POLICY "channel_identities: members can insert"'
+    );
+    expect(attach).not.toContain(
+      'CREATE POLICY "channel_identities: members can delete"'
+    );
+  });
+
+  it("creates a SECURITY INVOKER RPC granted only to authenticated", () => {
+    expect(attach).toContain("CREATE OR REPLACE FUNCTION public.attach_channel_identity_lead");
+    expect(attach).toContain("SECURITY INVOKER");
+    expect(attach).not.toContain("SECURITY DEFINER");
+    expect(attach).toContain(
+      "GRANT EXECUTE ON FUNCTION public.attach_channel_identity_lead(uuid, uuid, uuid) TO authenticated"
+    );
+    expect(attach).toContain(
+      "REVOKE ALL ON FUNCTION public.attach_channel_identity_lead(uuid, uuid, uuid) FROM PUBLIC"
+    );
+    expect(attach).not.toContain("TO anon");
+    expect(attach).not.toContain("TO service_role");
+  });
+
+  it("scopes identity and lead by org + id, then writes identity before open external conversations", () => {
+    expect(attach).toContain("WHERE id = p_channel_identity_id");
+    expect(attach).toContain("AND organization_id = p_organization_id");
+    expect(attach).toContain("WHERE id = p_lead_id");
+    expect(attach).toContain("FROM public.leads");
+
+    const identityUpdate = attach.indexOf(
+      "UPDATE public.channel_identities"
+    );
+    const conversationUpdate = attach.indexOf("UPDATE public.conversations");
+    expect(identityUpdate).toBeGreaterThan(-1);
+    expect(conversationUpdate).toBeGreaterThan(identityUpdate);
+
+    expect(attach).toContain("status = 'open'");
+    expect(attach).toContain("channel <> 'in_app'");
+    expect(attach).toContain(
+      "WHERE channel_identity_id = p_channel_identity_id"
+    );
+    expect(attach).not.toContain("status = 'closed'");
+    expect(attach).not.toContain("INSERT INTO public.conversations");
+    expect(attach).not.toContain("INSERT INTO public.channel_identities");
+    expect(attach).not.toContain("DELETE FROM public.leads");
+    expect(attach).not.toContain("DELETE FROM public.conversations");
+  });
+
+  it("does not drop persist_channel_inbound, add tables, enums, secrets, or uniqueness changes", () => {
+    expect(attach).not.toContain("DROP FUNCTION");
+    expect(attach).not.toContain("persist_channel_inbound");
+    expect(attach).not.toContain("CREATE TABLE");
+    expect(attach).not.toContain("CREATE TYPE");
+    expect(attach).not.toContain("ADD VALUE");
+    expect(attach).not.toContain("CREATE INDEX");
+    expect(attach).not.toContain("DROP INDEX");
+    expect(attach).not.toContain("channel_account_secrets");
+    expect(attach).not.toContain("webhook_secret");
+    expect(attach).not.toContain("UNIQUE");
+    expect(attach).not.toContain("DISABLE ROW LEVEL SECURITY");
   });
 });
