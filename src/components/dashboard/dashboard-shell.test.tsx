@@ -32,6 +32,24 @@ const organization: OrganizationWithRole = {
 };
 
 describe("DashboardShell navigation", () => {
+  it("includes a Channels item pointing at /dashboard/channels", () => {
+    render(
+      <DashboardShell
+        profile={profile}
+        organizations={[organization]}
+        currentOrganization={organization}
+      >
+        <div>content</div>
+      </DashboardShell>
+    );
+
+    const links = screen.getAllByRole("link", { name: "Channels" });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", "/dashboard/channels");
+    }
+  });
+
   it("includes a Channel Identities item pointing at /dashboard/identities", () => {
     render(
       <DashboardShell
