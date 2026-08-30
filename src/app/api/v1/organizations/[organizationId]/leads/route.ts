@@ -14,6 +14,7 @@ import { validateBody, validateParams } from "@/lib/api/validate";
 import { createLeadSchema } from "@/modules/leads/schema";
 import { listLeads, type LeadsFilter } from "@/modules/leads/queries";
 import { createLead } from "@/modules/leads/actions";
+import { excludeChannelStubsQuerySchema } from "@/modules/channels/schema";
 import type { LeadStatus, LeadSource } from "@/lib/db/types";
 
 // Exported so route tests can reference the same defaults without duplication.
@@ -85,6 +86,7 @@ const listLeadsQuerySchema = z.object({
       z.string().uuid("owner_id must be a valid UUID or 'unassigned'"),
     ])
     .optional(),
+  exclude_channel_stubs: excludeChannelStubsQuerySchema,
 });
 
 interface RouteContext {
@@ -98,7 +100,17 @@ export async function GET(req: NextRequest, context: RouteContext): Promise<Next
 
     const rawParams = Object.fromEntries(req.nextUrl.searchParams.entries());
     const params = validateParams(rawParams, listLeadsQuerySchema);
-    const { page, limit, search, status, source, sortBy, sortOrder, owner_id } = params;
+    const {
+      page,
+      limit,
+      search,
+      status,
+      source,
+      sortBy,
+      sortOrder,
+      owner_id,
+      exclude_channel_stubs,
+    } = params;
 
     // Build the filter object — only include fields that were actually provided.
     const filter: LeadsFilter = {};
@@ -108,6 +120,7 @@ export async function GET(req: NextRequest, context: RouteContext): Promise<Next
     if (sortBy) filter.sortBy = sortBy;
     if (sortOrder) filter.sortOrder = sortOrder;
     if (owner_id) filter.ownerId = owner_id;
+    if (exclude_channel_stubs) filter.excludeChannelStubs = true;
 
     const leads = await listLeads(organizationId, user.id, { page, limit }, filter);
     return successResponse(leads, {

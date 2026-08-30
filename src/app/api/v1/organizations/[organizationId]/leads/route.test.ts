@@ -666,3 +666,55 @@ describe("GET /organizations/:organizationId/leads — owner_id filter", () => {
     );
   });
 });
+
+describe("GET /organizations/:organizationId/leads — exclude_channel_stubs", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getOrgContext).mockResolvedValue(mockOrgContext);
+  });
+
+  it("forwards excludeChannelStubs=true when exclude_channel_stubs=true", async () => {
+    vi.mocked(listLeads).mockResolvedValue([]);
+
+    const res = await GET(
+      makeGetRequest(BASE_PATH, { exclude_channel_stubs: "true" }),
+      makeContext()
+    );
+
+    expect(res.status).toBe(200);
+    expect(listLeads).toHaveBeenCalledWith(
+      ORG_A,
+      USER_1,
+      expect.any(Object),
+      expect.objectContaining({ excludeChannelStubs: true })
+    );
+  });
+
+  it("does not set excludeChannelStubs when omitted or false", async () => {
+    vi.mocked(listLeads).mockResolvedValue([]);
+
+    await GET(makeGetRequest(BASE_PATH, {}), makeContext());
+    expect(vi.mocked(listLeads).mock.calls[0]?.[3]).not.toHaveProperty(
+      "excludeChannelStubs"
+    );
+
+    vi.mocked(listLeads).mockClear();
+    await GET(
+      makeGetRequest(BASE_PATH, { exclude_channel_stubs: "false" }),
+      makeContext()
+    );
+    expect(vi.mocked(listLeads).mock.calls[0]?.[3]).not.toHaveProperty(
+      "excludeChannelStubs"
+    );
+  });
+
+  it("rejects an invalid boolean with 422", async () => {
+    const res = await GET(
+      makeGetRequest(BASE_PATH, { exclude_channel_stubs: "yes" }),
+      makeContext()
+    );
+
+    expect(res.status).toBe(422);
+    expect(listLeads).not.toHaveBeenCalled();
+  });
+});

@@ -212,14 +212,29 @@ export const listChannelAccountsQuerySchema = z.object({
     .default(20),
 });
 
-export const listChannelIdentitiesQuerySchema = listChannelAccountsQuerySchema.extend(
-  {
+const optionalQueryBooleanSchema = z
+  .enum(["true", "false"])
+  .optional()
+  .transform((value) => (value === undefined ? undefined : value === "true"));
+
+export const listChannelIdentitiesQuerySchema = listChannelAccountsQuerySchema
+  .extend({
     channel_account_id: z
       .string()
       .uuid("channel_account_id must be a valid UUID")
       .optional(),
-  }
-);
+    lead_id: z.string().uuid("lead_id must be a valid UUID").optional(),
+    unmatched: optionalQueryBooleanSchema,
+  })
+  .refine((value) => !(value.lead_id !== undefined && value.unmatched === true), {
+    message: "lead_id cannot be combined with unmatched=true",
+    path: ["unmatched"],
+  });
+
+export const listChannelIdentityMatchCandidatesQuerySchema =
+  listChannelAccountsQuerySchema;
+
+export const excludeChannelStubsQuerySchema = optionalQueryBooleanSchema;
 
 export const channelIdentityIdParamsSchema = z.object({
   channelIdentityId: z.string().uuid("Channel identity ID must be a valid UUID"),

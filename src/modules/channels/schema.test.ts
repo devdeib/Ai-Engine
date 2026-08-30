@@ -311,6 +311,148 @@ describe("updateChannelAccountStatusSchema", () => {
   });
 });
 
+describe("listChannelIdentitiesQuerySchema", () => {
+  const leadId = "11111111-1111-4111-8111-111111111111";
+  const accountId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  it("accepts lead_id, unmatched, and existing pagination filters", async () => {
+    const { listChannelIdentitiesQuerySchema } = await import(
+      "@/modules/channels/schema"
+    );
+
+    expect(listChannelIdentitiesQuerySchema.safeParse({}).success).toBe(true);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({ lead_id: leadId }).success
+    ).toBe(true);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({ unmatched: "true" }).success
+    ).toBe(true);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({ unmatched: "false" }).success
+    ).toBe(true);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({
+        lead_id: leadId,
+        unmatched: "false",
+      }).success
+    ).toBe(true);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({
+        page: "2",
+        limit: "100",
+        channel_account_id: accountId,
+      }).success
+    ).toBe(true);
+
+    const parsed = listChannelIdentitiesQuerySchema.safeParse({
+      unmatched: "true",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.unmatched).toBe(true);
+      expect(parsed.data.page).toBe(1);
+      expect(parsed.data.limit).toBe(20);
+    }
+  });
+
+  it("rejects invalid UUID, boolean, pagination, and contradictory filters", async () => {
+    const { listChannelIdentitiesQuerySchema } = await import(
+      "@/modules/channels/schema"
+    );
+
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({ lead_id: "not-a-uuid" })
+        .success
+    ).toBe(false);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({ lead_id: null }).success
+    ).toBe(false);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({ unmatched: "yes" }).success
+    ).toBe(false);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({ unmatched: "TRUE" }).success
+    ).toBe(false);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({
+        lead_id: leadId,
+        unmatched: "true",
+      }).success
+    ).toBe(false);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({ page: "0" }).success
+    ).toBe(false);
+    expect(
+      listChannelIdentitiesQuerySchema.safeParse({ limit: "101" }).success
+    ).toBe(false);
+  });
+
+  it("strips extra identity keys instead of treating them as query controls", async () => {
+    const { listChannelIdentitiesQuerySchema } = await import(
+      "@/modules/channels/schema"
+    );
+    const parsed = listChannelIdentitiesQuerySchema.safeParse({
+      lead_id: leadId,
+      organizationId: "bbbbbbbb-0000-4000-8000-000000000002",
+      channelAccountId: accountId,
+      externalAddress: "+9745550001",
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.lead_id).toBe(leadId);
+      expect(parsed.data).not.toHaveProperty("organizationId");
+      expect(parsed.data).not.toHaveProperty("channelAccountId");
+      expect(parsed.data).not.toHaveProperty("externalAddress");
+      expect(parsed.data).not.toHaveProperty("id");
+    }
+  });
+});
+
+describe("listChannelIdentityMatchCandidatesQuerySchema", () => {
+  it("accepts default and max pagination and rejects invalid limits", async () => {
+    const { listChannelIdentityMatchCandidatesQuerySchema } = await import(
+      "@/modules/channels/schema"
+    );
+    const defaults = listChannelIdentityMatchCandidatesQuerySchema.safeParse({});
+    expect(defaults.success).toBe(true);
+    if (defaults.success) {
+      expect(defaults.data).toEqual({ page: 1, limit: 20 });
+    }
+    expect(
+      listChannelIdentityMatchCandidatesQuerySchema.safeParse({
+        page: "1",
+        limit: "100",
+      }).success
+    ).toBe(true);
+    expect(
+      listChannelIdentityMatchCandidatesQuerySchema.safeParse({ limit: "101" })
+        .success
+    ).toBe(false);
+    expect(
+      listChannelIdentityMatchCandidatesQuerySchema.safeParse({ page: "0" })
+        .success
+    ).toBe(false);
+  });
+});
+
+describe("excludeChannelStubsQuerySchema", () => {
+  it("accepts true/false and rejects invalid booleans", async () => {
+    const { excludeChannelStubsQuerySchema } = await import(
+      "@/modules/channels/schema"
+    );
+    expect(excludeChannelStubsQuerySchema.safeParse("true").success).toBe(true);
+    expect(excludeChannelStubsQuerySchema.safeParse("false").success).toBe(
+      true
+    );
+    expect(excludeChannelStubsQuerySchema.safeParse(undefined).success).toBe(
+      true
+    );
+    expect(excludeChannelStubsQuerySchema.safeParse("yes").success).toBe(false);
+    expect(excludeChannelStubsQuerySchema.safeParse("1").success).toBe(false);
+  });
+});
+
 describe("attachChannelIdentityLeadSchema", () => {
   const leadId = "11111111-1111-4111-8111-111111111111";
 

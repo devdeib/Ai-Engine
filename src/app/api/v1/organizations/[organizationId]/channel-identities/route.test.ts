@@ -96,7 +96,7 @@ describe("GET /organizations/:organizationId/channel-identities", () => {
       ORG_A,
       USER_1,
       { page: 1, limit: 20 },
-      { channelAccountId: undefined }
+      { channelAccountId: undefined, leadId: undefined, unmatched: undefined }
     );
     expect(body.data[0]).not.toHaveProperty("webhookSecret");
     expect(JSON.stringify(body)).not.toContain("webhook_secret");
@@ -119,7 +119,74 @@ describe("GET /organizations/:organizationId/channel-identities", () => {
       ORG_A,
       USER_1,
       { page: 2, limit: 10 },
-      { channelAccountId: ACCOUNT_ID }
+      { channelAccountId: ACCOUNT_ID, leadId: undefined, unmatched: undefined }
     );
+  });
+
+  it("forwards lead_id and unmatched filters", async () => {
+    vi.mocked(getOrgContext).mockResolvedValue(mockOrgContext);
+    vi.mocked(listChannelIdentities).mockResolvedValue([]);
+    const leadId = "11111111-1111-4111-8111-111111111111";
+
+    const byLead = await GET(makeGet({ lead_id: leadId }), {
+      params: Promise.resolve({ organizationId: ORG_A }),
+    });
+    expect(byLead.status).toBe(200);
+    expect(listChannelIdentities).toHaveBeenCalledWith(
+      ORG_A,
+      USER_1,
+      { page: 1, limit: 20 },
+      { channelAccountId: undefined, leadId, unmatched: undefined }
+    );
+
+    const unmatched = await GET(makeGet({ unmatched: "true" }), {
+      params: Promise.resolve({ organizationId: ORG_A }),
+    });
+    expect(unmatched.status).toBe(200);
+    expect(listChannelIdentities).toHaveBeenLastCalledWith(
+      ORG_A,
+      USER_1,
+      { page: 1, limit: 20 },
+      { channelAccountId: undefined, leadId: undefined, unmatched: true }
+    );
+
+    const matched = await GET(makeGet({ unmatched: "false" }), {
+      params: Promise.resolve({ organizationId: ORG_A }),
+    });
+    expect(matched.status).toBe(200);
+    expect(listChannelIdentities).toHaveBeenLastCalledWith(
+      ORG_A,
+      USER_1,
+      { page: 1, limit: 20 },
+      { channelAccountId: undefined, leadId: undefined, unmatched: false }
+    );
+  });
+
+  it("returns 422 for invalid UUID, boolean, or contradictory filters", async () => {
+    vi.mocked(getOrgContext).mockResolvedValue(mockOrgContext);
+    const leadId = "11111111-1111-4111-8111-111111111111";
+
+    const invalidUuid = await GET(makeGet({ lead_id: "not-a-uuid" }), {
+      params: Promise.resolve({ organizationId: ORG_A }),
+    });
+    expect(invalidUuid.status).toBe(422);
+
+    const invalidBoolean = await GET(makeGet({ unmatched: "yes" }), {
+      params: Promise.resolve({ organizationId: ORG_A }),
+    });
+    expect(invalidBoolean.status).toBe(422);
+
+    const contradiction = await GET(
+      makeGet({ lead_id: leadId, unmatched: "true" }),
+      { params: Promise.resolve({ organizationId: ORG_A }) }
+    );
+    expect(contradiction.status).toBe(422);
+
+    const overLimit = await GET(makeGet({ limit: "101" }), {
+      params: Promise.resolve({ organizationId: ORG_A }),
+    });
+    expect(overLimit.status).toBe(422);
+
+    expect(listChannelIdentities).not.toHaveBeenCalled();
   });
 });

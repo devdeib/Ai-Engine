@@ -22,15 +22,17 @@ export async function GET(
     const { organizationId } = await context.params;
     const { user } = await getOrgContext(req, organizationId);
     const rawParams = Object.fromEntries(req.nextUrl.searchParams.entries());
-    const { page, limit, channel_account_id } = validateParams(
-      rawParams,
-      listChannelIdentitiesQuerySchema
-    );
+    const { page, limit, channel_account_id, lead_id, unmatched } =
+      validateParams(rawParams, listChannelIdentitiesQuerySchema);
     const identities = await listChannelIdentities(
       organizationId,
       user.id,
       { page, limit },
-      { channelAccountId: channel_account_id }
+      {
+        channelAccountId: channel_account_id,
+        leadId: lead_id,
+        unmatched,
+      }
     );
     return successResponse(identities, {
       meta: { page, limit, count: identities.length },

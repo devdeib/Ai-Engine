@@ -16,6 +16,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { requireOrgMembership } from "@/modules/organizations/queries";
 import { NotFoundError } from "@/lib/errors";
+import { CHANNEL_STUB_LEAD_EXCLUDE_OR } from "@/modules/channels/match";
 import type { Lead, LeadSource, LeadStatus } from "@/lib/db/types";
 
 export interface LeadsPagination {
@@ -54,6 +55,11 @@ export interface LeadsFilter {
   sortBy?: LeadSortField;
   /** Sort direction (default: desc). */
   sortOrder?: LeadSortOrder;
+  /**
+   * When true, exclude ingest-created channel stub leads (Unknown Customer
+   * with empty email and phone). Heuristic — see isChannelStubLead.
+   */
+  excludeChannelStubs?: boolean;
 }
 
 /**
@@ -110,6 +116,10 @@ export async function listLeads(
     query = query.is("owner_id", null);
   } else if (filter.ownerId) {
     query = query.eq("owner_id", filter.ownerId);
+  }
+
+  if (filter.excludeChannelStubs) {
+    query = query.or(CHANNEL_STUB_LEAD_EXCLUDE_OR);
   }
 
   const sortField = filter.sortBy ?? "created_at";

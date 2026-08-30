@@ -704,3 +704,42 @@ describe("listLeads — owner filter", () => {
     expect(ownerEqCalls).toHaveLength(0);
   });
 });
+
+describe("listLeads — excludeChannelStubs filter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("applies the stub-heuristic or-filter when excludeChannelStubs is true", async () => {
+    const { CHANNEL_STUB_LEAD_EXCLUDE_OR } = await import(
+      "@/modules/channels/match"
+    );
+    const { filterChain } = mockForListLeadsFiltered({
+      memberRow: makeMemberRow(),
+    });
+
+    await listLeads(ORG_A, USER_1, { page: 1, limit: 20 }, {
+      excludeChannelStubs: true,
+    });
+
+    expect(filterChain.or).toHaveBeenCalledWith(CHANNEL_STUB_LEAD_EXCLUDE_OR);
+  });
+
+  it("does not apply the stub filter when excludeChannelStubs is omitted or false", async () => {
+    const { CHANNEL_STUB_LEAD_EXCLUDE_OR } = await import(
+      "@/modules/channels/match"
+    );
+    const omitted = mockForListLeadsFiltered({ memberRow: makeMemberRow() });
+    await listLeads(ORG_A, USER_1, { page: 1, limit: 20 }, {});
+    expect(omitted.filterChain.or).not.toHaveBeenCalled();
+
+    const disabled = mockForListLeadsFiltered({ memberRow: makeMemberRow() });
+    await listLeads(ORG_A, USER_1, { page: 1, limit: 20 }, {
+      excludeChannelStubs: false,
+    });
+    expect(disabled.filterChain.or).not.toHaveBeenCalled();
+    expect(disabled.filterChain.or).not.toHaveBeenCalledWith(
+      CHANNEL_STUB_LEAD_EXCLUDE_OR
+    );
+  });
+});
