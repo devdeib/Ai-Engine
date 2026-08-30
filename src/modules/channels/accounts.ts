@@ -20,6 +20,7 @@ import {
   type ChannelAccountPublic,
 } from "@/modules/channels/map";
 import { normalizeEmailAddress } from "@/modules/channels/adapters/email/parse";
+import { normalizeSmsAddress } from "@/modules/channels/adapters/sms/parse";
 import type { ChannelAccount } from "@/lib/db/types";
 
 function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
@@ -49,6 +50,10 @@ export async function createChannelAccount(
 
   if (parsed.data.channel === "email") {
     return createEmailChannelAccount(organizationId, userId, parsed.data);
+  }
+
+  if (parsed.data.channel === "sms") {
+    return createSmsChannelAccount(organizationId, userId, parsed.data);
   }
 
   if (parsed.data.channel === "test") {
@@ -81,6 +86,77 @@ export async function createEmailChannelAccount(
     .insert({
       organization_id: organizationId,
       channel: "email",
+      status: "active",
+      provider_destination_id: destination,
+      created_by_user_id: userId,
+    })
+    .select()
+    .single();
+
+  if (isUniqueViolation(error)) {
+    throw new ConflictError("A channel account already exists for this destination");
+  }
+  if (error || !data) {
+    throw new Error("Failed to create channel account");
+  }
+
+  const account = data as ChannelAccount;
+  const admin = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const secretInsert = await (admin.from("channel_account_secrets") as any).insert({
+    channel_account_id: account.id,
+    organization_id: organizationId,
+    webhook_secret: signingSecret,
+    provider_access_token: accessToken,
+  });
+
+  if (secretInsert.error) {
+    logger.error("Failed to store channel account secret", {
+      organizationId,
+      code: secretInsert.error.code ?? "INTERNAL_ERROR",
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rollback = await (admin.from("channel_accounts") as any)
+      .delete()
+      .eq("id", account.id)
+      .eq("organization_id", organizationId);
+
+    if (rollback.error) {
+      logger.error("Failed to roll back channel account after secret insert failure", {
+        organizationId,
+        code: rollback.error.code ?? "INTERNAL_ERROR",
+      });
+    }
+
+    throw new Error("Failed to store channel account secret");
+  }
+
+  return toPublicChannelAccount(account);
+}
+
+export async function createSmsChannelAccount(
+  organizationId: string,
+  userId: string,
+  input: CreateChannelAccountInput
+): Promise<ChannelAccountPublic> {
+  await requireOrgMembership(organizationId, userId);
+
+  const destination = normalizeSmsAddress(input.provider_destination_id);
+  if (!destination) {
+    throw new ValidationError("Invalid channel account data", {
+      provider_destination_id: ["Destination must be a canonical E.164 number"],
+    });
+  }
+
+  const accessToken = input.access_token?.trim() ?? "";
+  const signingSecret = input.webhook_signing_secret ?? "";
+  const supabase = await createClient();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase.from("channel_accounts") as any)
+    .insert({
+      organization_id: organizationId,
+      channel: "sms",
       status: "active",
       provider_destination_id: destination,
       created_by_user_id: userId,

@@ -36,13 +36,28 @@ describe("Email delivery error mapping", () => {
       errorCode: "FORBIDDEN",
       retryable: false,
     });
+    expect(classifyEmailHttpError(400, null)).toEqual({
+      errorCode: "MALFORMED_REQUEST",
+      retryable: false,
+    });
     expect(classifyEmailHttpError(422, null)).toEqual({
       errorCode: "MALFORMED_REQUEST",
       retryable: false,
     });
-    expect(classifyEmailHttpError(404, null)).toEqual({
+    expect(classifyEmailHttpError(404, { name: "not_found" })).toEqual({
       errorCode: "INVALID_DESTINATION",
       retryable: false,
+    });
+  });
+
+  it("treats unknown 4xx as terminal and unknown 5xx as retryable", () => {
+    expect(classifyEmailHttpError(418, null)).toEqual({
+      errorCode: "HTTP_418",
+      retryable: false,
+    });
+    expect(classifyEmailHttpError(599, null)).toEqual({
+      errorCode: "HTTP_599",
+      retryable: true,
     });
   });
 });

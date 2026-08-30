@@ -26,7 +26,7 @@ export const testWebhookPayloadSchema = canonicalInboundSchema;
 
 export const createChannelAccountSchema = z
   .object({
-    channel: z.enum(["test", "whatsapp", "email"]).default("test"),
+    channel: z.enum(["test", "whatsapp", "email", "sms"]).default("test"),
     provider_destination_id: z
       .string()
       .trim()
@@ -63,7 +63,31 @@ export const createChannelAccountSchema = z
       return;
     }
 
-    if (data.channel !== "email") {
+    if (data.channel === "email") {
+      if (!data.access_token?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["access_token"],
+          message: "Access token is required",
+        });
+      }
+      if (!data.webhook_signing_secret) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["webhook_signing_secret"],
+          message: "Webhook signing secret is required",
+        });
+      } else if (!data.webhook_signing_secret.startsWith("whsec_")) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["webhook_signing_secret"],
+          message: "Webhook signing secret is invalid",
+        });
+      }
+      return;
+    }
+
+    if (data.channel !== "sms") {
       return;
     }
 
@@ -79,12 +103,6 @@ export const createChannelAccountSchema = z
         code: z.ZodIssueCode.custom,
         path: ["webhook_signing_secret"],
         message: "Webhook signing secret is required",
-      });
-    } else if (!data.webhook_signing_secret.startsWith("whsec_")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["webhook_signing_secret"],
-        message: "Webhook signing secret is invalid",
       });
     }
   });

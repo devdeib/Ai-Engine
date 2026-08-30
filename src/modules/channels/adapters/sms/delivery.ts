@@ -1,22 +1,22 @@
 /**
- * Resend Email delivery adapter. Text send only.
- * POST https://api.resend.com/emails with Idempotency-Key = messageId.
+ * Telnyx SMS delivery adapter. Text send only.
+ * POST https://api.telnyx.com/v2/messages with Bearer provider_access_token.
  *
- * Resend supports provider-side Idempotency-Key. Delivery remains at-least-once;
- * do not claim exactly-once.
+ * Official Telnyx POST /v2/messages does not document Idempotency-Key
+ * (unlike Telnyx email_messages). This adapter does not send that header.
+ * The generic worker still supplies messageId as idempotencyKey.
+ * Delivery remains at-least-once; do not claim exactly-once.
  */
 import "server-only";
 import {
-  EMAIL_API_TIMEOUT_MS,
-  EMAIL_IDEMPOTENCY_HEADER,
-  EMAIL_SUBJECT_MAX_LENGTH,
-  resendEmailsUrl,
-} from "@/modules/channels/adapters/email/constants";
+  SMS_API_TIMEOUT_MS,
+  telnyxMessagesUrl,
+} from "@/modules/channels/adapters/sms/constants";
 import {
-  classifyEmailHttpError,
-  classifyEmailNetworkError,
-} from "@/modules/channels/adapters/email/errors";
-import { loadEmailDeliveryCredentials } from "@/modules/channels/secrets";
+  classifySmsHttpError,
+  classifySmsNetworkError,
+} from "@/modules/channels/adapters/sms/errors";
+import { loadSmsDeliveryCredentials } from "@/modules/channels/secrets";
 import type {
   ChannelDeliveryAdapter,
   ChannelDeliverySendInput,
@@ -27,32 +27,22 @@ type FetchFn = typeof fetch;
 
 function readProviderMessageId(body: unknown): string | null {
   if (typeof body !== "object" || body === null) return null;
-  const id = (body as { id?: unknown }).id;
+  const data = (body as { data?: unknown }).data;
+  if (typeof data !== "object" || data === null) return null;
+  const id = (data as { id?: unknown }).id;
   return typeof id === "string" && id.trim().length > 0 ? id.trim() : null;
 }
 
-/**
- * Resend requires `subject`. It is not CRM data and is not stored.
- * First line of the plain-text body, truncated.
- */
-export function emailOutboundSubject(body: string): string {
-  const line = body.split(/\r?\n/, 1)[0]?.trim() ?? "";
-  if (!line) {
-    return "Message";
-  }
-  return line.length > EMAIL_SUBJECT_MAX_LENGTH
-    ? line.slice(0, EMAIL_SUBJECT_MAX_LENGTH)
-    : line;
-}
-
-export function createEmailDeliveryAdapter(deps: {
+export function createSmsDeliveryAdapter(deps: {
   fetchImpl?: FetchFn;
-  loadCredentials?: typeof loadEmailDeliveryCredentials;
+  loadCredentials?: typeof loadSmsDeliveryCredentials;
 } = {}): ChannelDeliveryAdapter {
-  const loadCredentials = deps.loadCredentials ?? loadEmailDeliveryCredentials;
+  const loadCredentials = deps.loadCredentials ?? loadSmsDeliveryCredentials;
 
   return {
     async send(input: ChannelDeliverySendInput): Promise<ChannelDeliverySendResult> {
+      void input.idempotencyKey;
+
       const credentials = await loadCredentials(
         input.organizationId,
         input.channelAccountId
@@ -66,7 +56,7 @@ export function createEmailDeliveryAdapter(deps: {
       }
 
       const fetchFn = deps.fetchImpl ?? globalThis.fetch;
-      const url = resendEmailsUrl();
+      const url = telnyxMessagesUrl();
       let response: Response;
       try {
         response = await fetchFn(url, {
@@ -74,18 +64,16 @@ export function createEmailDeliveryAdapter(deps: {
           headers: {
             Authorization: `Bearer ${credentials.accessToken}`,
             "Content-Type": "application/json",
-            [EMAIL_IDEMPOTENCY_HEADER]: input.idempotencyKey,
           },
           body: JSON.stringify({
-            from: credentials.mailbox,
+            from: credentials.destination,
             to: input.destination,
-            subject: emailOutboundSubject(input.body),
             text: input.body,
           }),
-          signal: AbortSignal.timeout(EMAIL_API_TIMEOUT_MS),
+          signal: AbortSignal.timeout(SMS_API_TIMEOUT_MS),
         });
       } catch (error) {
-        const classified = classifyEmailNetworkError(error);
+        const classified = classifySmsNetworkError(error);
         return {
           ok: false,
           errorCode: classified.errorCode,
@@ -101,7 +89,7 @@ export function createEmailDeliveryAdapter(deps: {
       }
 
       if (!response.ok) {
-        const classified = classifyEmailHttpError(response.status, parsed);
+        const classified = classifySmsHttpError(response.status, parsed);
         return {
           ok: false,
           errorCode: classified.errorCode,
@@ -123,4 +111,4 @@ export function createEmailDeliveryAdapter(deps: {
   };
 }
 
-export const emailDeliveryAdapter = createEmailDeliveryAdapter();
+export const smsDeliveryAdapter = createSmsDeliveryAdapter();

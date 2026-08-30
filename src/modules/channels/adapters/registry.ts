@@ -3,6 +3,8 @@
  */
 import { emailDeliveryAdapter } from "@/modules/channels/adapters/email/delivery";
 import { emailInboundAdapter } from "@/modules/channels/adapters/email/inbound";
+import { smsDeliveryAdapter } from "@/modules/channels/adapters/sms/delivery";
+import { smsInboundAdapter } from "@/modules/channels/adapters/sms/inbound";
 import { testDeliveryAdapter } from "@/modules/channels/adapters/test-delivery";
 import { testInboundAdapter } from "@/modules/channels/adapters/test-inbound";
 import { whatsappDeliveryAdapter } from "@/modules/channels/adapters/whatsapp/delivery";
@@ -16,12 +18,14 @@ const inboundAdapters = {
   test: testInboundAdapter,
   whatsapp: whatsappInboundAdapter,
   email: emailInboundAdapter,
+  sms: smsInboundAdapter,
 } as const;
 
 const deliveryAdapters = {
   test: testDeliveryAdapter,
   whatsapp: whatsappDeliveryAdapter,
   email: emailDeliveryAdapter,
+  sms: smsDeliveryAdapter,
 } as const;
 
 export class UnsupportedChannelError extends Error {
@@ -42,6 +46,9 @@ export function getInboundAdapter(channel: string): ChannelInboundAdapter {
   if (channel === "email") {
     return inboundAdapters.email;
   }
+  if (channel === "sms") {
+    return inboundAdapters.sms;
+  }
   throw new UnsupportedChannelError(channel);
 }
 
@@ -54,6 +61,9 @@ export function getDeliveryAdapter(channel: string): ChannelDeliveryAdapter {
   }
   if (channel === "email") {
     return deliveryAdapters.email;
+  }
+  if (channel === "sms") {
+    return deliveryAdapters.sms;
   }
   throw new UnsupportedChannelError(channel);
 }

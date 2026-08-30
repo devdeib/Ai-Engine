@@ -144,6 +144,16 @@ describe("handleWhatsAppWebhookChallenge", () => {
     ).rejects.toBeInstanceOf(AuthenticationError);
   });
 
+  it("rejects an Email account GET challenge with generic 401", async () => {
+    mockAccount({ ...activeWhatsApp, channel: "email" }, VERIFY_TOKEN);
+    await expect(
+      handleWhatsAppWebhookChallenge({
+        channelAccountId: ACCOUNT_ID,
+        searchParams: params(),
+      })
+    ).rejects.toBeInstanceOf(AuthenticationError);
+  });
+
   it("rejects an unknown account without leaking existence", async () => {
     mockAccount(null, VERIFY_TOKEN);
     await expect(

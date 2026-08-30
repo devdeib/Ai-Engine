@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { ValidationError } from "@/lib/errors";
+import { AuthenticationError, ValidationError } from "@/lib/errors";
 import {
   normalizeEmailAddress,
   parseEmailInbound,
+  readReceivingPlainText,
   toCanonicalEmailInbound,
 } from "@/modules/channels/adapters/email/parse";
 
@@ -31,8 +32,8 @@ describe("Email address normalization", () => {
     expect(normalizeEmailAddress("  Buyer@Example.COM  ")).toBe(
       "buyer@example.com"
     );
-    expect(normalizeEmailAddress("Lead Person <Buyer@Example.COM>")).toBe(
-      "buyer@example.com"
+    expect(normalizeEmailAddress("John Doe <John@Example.COM>")).toBe(
+      "john@example.com"
     );
   });
 
@@ -63,7 +64,7 @@ describe("Email inbound parse", () => {
     }
   });
 
-  it("ignores delivered, bounced, opened, and other envelopes", () => {
+  it("ignores delivered, bounced, opened, clicked, and other envelopes", () => {
     expect(parseEmailInbound({ type: "email.delivered", data: {} })).toEqual({
       status: "ignored",
     });
@@ -71,6 +72,12 @@ describe("Email inbound parse", () => {
       status: "ignored",
     });
     expect(parseEmailInbound({ type: "email.opened", data: {} })).toEqual({
+      status: "ignored",
+    });
+    expect(parseEmailInbound({ type: "email.clicked", data: {} })).toEqual({
+      status: "ignored",
+    });
+    expect(parseEmailInbound({ type: "email.complained", data: {} })).toEqual({
       status: "ignored",
     });
   });
@@ -93,6 +100,15 @@ describe("Email inbound parse", () => {
     );
   });
 
+  it("reads Receiving API plain text and ignores HTML-only payloads", () => {
+    expect(readReceivingPlainText({ text: "  Hello  ", html: "<p>x</p>" })).toBe(
+      "Hello"
+    );
+    expect(readReceivingPlainText({ html: "<p>only</p>", text: null })).toBeNull();
+    expect(readReceivingPlainText({ text: "   " })).toBeNull();
+    expect(readReceivingPlainText(null)).toBeNull();
+  });
+
   it("selects the tenant mailbox when multiple recipients are present", () => {
     const parsed = toCanonicalEmailInbound({
       emailId: "msg-1",
@@ -105,5 +121,17 @@ describe("Email inbound parse", () => {
     if (parsed.status === "inbound") {
       expect(parsed.event.to).toBe(MAILBOX);
     }
+  });
+
+  it("fails closed when no recipient matches the trusted destination", () => {
+    expect(() =>
+      toCanonicalEmailInbound({
+        emailId: "msg-1",
+        from: "buyer@example.com",
+        recipients: ["other@example.com"],
+        text: "Hi",
+        destination: MAILBOX,
+      })
+    ).toThrow(AuthenticationError);
   });
 });

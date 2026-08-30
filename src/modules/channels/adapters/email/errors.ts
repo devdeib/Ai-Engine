@@ -1,6 +1,6 @@
 /**
- * Deterministic Resend delivery error mapping for Phase 5.3B.
- * 5.3A does not send HTTP. Adapter retryable is authoritative to the worker.
+ * Deterministic Resend delivery error mapping.
+ * Adapter retryable is authoritative to the worker.
  * Never include tokens, signatures, or raw payloads in error codes.
  */
 

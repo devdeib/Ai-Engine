@@ -25,6 +25,7 @@
  *   20260827000004_external_channel_generalization.sql
  *   20260827000005_whatsapp_channel.sql
  *   20260827000006_email_channel.sql
+ *   20260828000001_sms_channel.sql
  *
  * Re-generate (or update manually) whenever the schema changes.
  */
@@ -63,7 +64,7 @@ export type LeadActivityType =
   | "appointment"
   | "ai";
 
-export type ConversationChannel = "in_app" | "test" | "whatsapp" | "email";
+export type ConversationChannel = "in_app" | "test" | "whatsapp" | "email" | "sms";
 
 export type ConversationStatus = "open" | "closed";
 
@@ -112,7 +113,7 @@ export type AiSalesRecommendationMappedTool =
   | "create_follow_up"
   | "create_appointment";
 
-export type ChannelKind = "test" | "whatsapp" | "email";
+export type ChannelKind = "test" | "whatsapp" | "email" | "sms";
 
 export type ChannelAccountStatus = "active" | "paused" | "disabled";
 

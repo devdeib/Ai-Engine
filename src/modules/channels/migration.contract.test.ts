@@ -134,3 +134,37 @@ describe("Email channel migration contract", () => {
     expect(email).not.toContain("ALTER TABLE");
   });
 });
+
+describe("SMS channel migration contract", () => {
+  const sms = readFileSync(
+    resolve(process.cwd(), "supabase/migrations/20260828000001_sms_channel.sql"),
+    "utf8"
+  );
+
+  it("adds SMS enum values additively without changing RLS, tables, or uniqueness", () => {
+    expect(sms).toContain("ADD VALUE IF NOT EXISTS 'sms'");
+    expect(sms).toContain("ALTER TYPE public.conversation_channel");
+    expect(sms).toContain("ALTER TYPE public.channel_kind");
+    expect(sms).not.toContain("DROP TYPE");
+    expect(sms).not.toContain("DISABLE ROW LEVEL SECURITY");
+    expect(sms).not.toContain("DROP POLICY");
+    expect(sms).not.toContain("DROP CONSTRAINT");
+    expect(sms).not.toContain("CREATE TABLE");
+    expect(sms).not.toContain("CREATE INDEX");
+    expect(sms).not.toContain("DROP INDEX");
+    expect(sms).not.toContain("ALTER TABLE");
+  });
+
+  it("does not appear in historical channel migrations", () => {
+    expect(enums.toLowerCase()).not.toContain("'sms'");
+    expect(substrate.toLowerCase()).not.toContain("'sms'");
+    expect(reliability.toLowerCase()).not.toContain("'sms'");
+    expect(generalization.toLowerCase()).not.toContain("'sms'");
+    expect(whatsapp.toLowerCase()).not.toContain("'sms'");
+    const email = readFileSync(
+      resolve(process.cwd(), "supabase/migrations/20260827000006_email_channel.sql"),
+      "utf8"
+    );
+    expect(email.toLowerCase()).not.toContain("'sms'");
+  });
+});

@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   loadChannelAccountSecrets,
   loadEmailDeliveryCredentials,
+  loadSmsDeliveryCredentials,
   loadWhatsAppDeliveryCredentials,
 } from "@/modules/channels/secrets";
 
@@ -209,6 +210,92 @@ describe("channel secret loaders", () => {
 
     await expect(
       loadEmailDeliveryCredentials(ORG_A, ACCOUNT_ID)
+    ).resolves.toBeNull();
+  });
+
+  it("loads SMS delivery credentials from the destination and secret row", async () => {
+    const smsToken = "KEY" + "z".repeat(40);
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: ACCOUNT_ID,
+                      organization_id: ORG_A,
+                      channel: "sms",
+                      status: "active",
+                      provider_destination_id: "+17735550001",
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "channel_account_secrets") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      webhook_secret: Buffer.alloc(32, 7).toString("base64"),
+                      provider_access_token: smsToken,
+                      webhook_verify_token: null,
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    await expect(
+      loadSmsDeliveryCredentials(ORG_A, ACCOUNT_ID)
+    ).resolves.toEqual({
+      accessToken: smsToken,
+      destination: "+17735550001",
+    });
+  });
+
+  it("does not load SMS credentials for a WhatsApp or Email account", async () => {
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: ACCOUNT_ID,
+                      organization_id: ORG_A,
+                      channel: "email",
+                      status: "active",
+                      provider_destination_id: "sales@acme.example",
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    await expect(
+      loadSmsDeliveryCredentials(ORG_A, ACCOUNT_ID)
     ).resolves.toBeNull();
   });
 });

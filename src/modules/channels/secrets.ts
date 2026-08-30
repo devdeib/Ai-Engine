@@ -22,6 +22,11 @@ export interface EmailDeliveryCredentials {
   mailbox: string;
 }
 
+export interface SmsDeliveryCredentials {
+  accessToken: string;
+  destination: string;
+}
+
 export async function loadChannelAccountSecrets(
   organizationId: string,
   channelAccountId: string
@@ -128,5 +133,44 @@ export async function loadEmailDeliveryCredentials(
   return {
     accessToken: secrets.providerAccessToken,
     mailbox: account.provider_destination_id,
+  };
+}
+
+export async function loadSmsDeliveryCredentials(
+  organizationId: string,
+  channelAccountId: string
+): Promise<SmsDeliveryCredentials | null> {
+  const supabase = await createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const accountResult = await (supabase.from("channel_accounts") as any)
+    .select("id, organization_id, channel, status, provider_destination_id")
+    .eq("id", channelAccountId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  const account = accountResult.data as {
+    channel?: string;
+    status?: string;
+    provider_destination_id?: string;
+  } | null;
+
+  if (
+    accountResult.error ||
+    !account ||
+    account.channel !== "sms" ||
+    account.status !== "active" ||
+    !account.provider_destination_id
+  ) {
+    return null;
+  }
+
+  const secrets = await loadChannelAccountSecrets(organizationId, channelAccountId);
+  if (!secrets?.providerAccessToken) {
+    return null;
+  }
+
+  return {
+    accessToken: secrets.providerAccessToken,
+    destination: account.provider_destination_id,
   };
 }

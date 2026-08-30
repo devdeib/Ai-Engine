@@ -23,6 +23,7 @@ export const CONVERSATION_CHANNEL_LABELS: Record<ConversationChannel, string> = 
   test: "Test",
   whatsapp: "WhatsApp",
   email: "Email",
+  sms: "SMS",
 };
 
 export function leadDisplayName(

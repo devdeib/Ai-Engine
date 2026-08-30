@@ -1,4 +1,4 @@
-import { ValidationError } from "@/lib/errors";
+import { AuthenticationError, ValidationError } from "@/lib/errors";
 import { canonicalInboundSchema } from "@/modules/channels/schema";
 import { EMAIL_RECEIVED_EVENT } from "@/modules/channels/adapters/email/constants";
 import type { ChannelInboundAdapterResult } from "@/modules/channels/adapters/types";
@@ -96,14 +96,17 @@ export function toCanonicalEmailInbound(input: {
   occurredAt?: string;
   destination?: string;
 }): ChannelInboundAdapterResult {
-  const destination = input.destination
-    ? normalizeEmailAddress(input.destination)
-    : "";
-  const matchingTo =
-    destination.length > 0
-      ? input.recipients.find((recipient) => recipient === destination)
-      : undefined;
-  const to = matchingTo ?? input.recipients[0] ?? "";
+  let to = input.recipients[0] ?? "";
+  if (input.destination !== undefined) {
+    const destination = normalizeEmailAddress(input.destination);
+    const matchingTo = input.recipients.find(
+      (recipient) => recipient === destination
+    );
+    if (!matchingTo) {
+      throw new AuthenticationError();
+    }
+    to = matchingTo;
+  }
 
   const parsed = canonicalInboundSchema.safeParse({
     providerMessageId: input.emailId,
@@ -123,6 +126,27 @@ export function toCanonicalEmailInbound(input: {
   return { status: "inbound", event: parsed.data };
 }
 
+export function parseEmailWebhookJson(rawBody: string): unknown {
+  try {
+    return JSON.parse(rawBody) as unknown;
+  } catch {
+    throw new ValidationError("Request body must be valid JSON");
+  }
+}
+
+/**
+ * Plain-text body from GET /emails/receiving/:id.
+ * HTML-only or empty text is unavailable: callers must ignore, not invent a body.
+ */
+export function readReceivingPlainText(body: unknown): string | null {
+  const record = asRecord(body);
+  if (!record) {
+    return null;
+  }
+  const text = readString(record, "text").trim();
+  return text.length > 0 ? text : null;
+}
+
 export function parseEmailInbound(
   payload: unknown,
   destination?: string
@@ -132,9 +156,10 @@ export function parseEmailInbound(
     return IGNORED;
   }
 
-  // 5.3A: Resend webhooks are metadata-only. Live envelopes have no text.
-  // 5.3B fetches text via GET /emails/receiving/:id inside this adapter.
-  // Fixtures may include data.text to exercise canonical mapping now.
+  // Live inbound does not use webhook data.text. Resend webhooks are
+  // metadata-only; the inbound adapter fetches plain text via Receiving API.
+  // This helper still maps fixture data.text for canonical unit tests.
+  // Missing text is ignored (no HTML fallback, no invented body).
   if (!parsed.metadata.text) {
     return IGNORED;
   }
@@ -153,11 +178,5 @@ export function parseEmailInboundBody(
   rawBody: string,
   destination?: string
 ): ChannelInboundAdapterResult {
-  let payload: unknown;
-  try {
-    payload = JSON.parse(rawBody) as unknown;
-  } catch {
-    throw new ValidationError("Request body must be valid JSON");
-  }
-  return parseEmailInbound(payload, destination);
+  return parseEmailInbound(parseEmailWebhookJson(rawBody), destination);
 }

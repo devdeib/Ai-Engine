@@ -86,6 +86,14 @@ describe("channel ingest source contract", () => {
       resolve(process.cwd(), "src/modules/channels/adapters/email/delivery.ts"),
       "utf8"
     );
+    const smsInbound = readFileSync(
+      resolve(process.cwd(), "src/modules/channels/adapters/sms/inbound.ts"),
+      "utf8"
+    );
+    const smsDelivery = readFileSync(
+      resolve(process.cwd(), "src/modules/channels/adapters/sms/delivery.ts"),
+      "utf8"
+    );
     const secrets = readFileSync(
       resolve(process.cwd(), "src/modules/channels/secrets.ts"),
       "utf8"
@@ -111,6 +119,8 @@ describe("channel ingest source contract", () => {
       whatsappChallenge,
       emailInbound,
       emailDelivery,
+      smsInbound,
+      smsDelivery,
       secrets,
     ]) {
       const code = source
@@ -227,5 +237,105 @@ describe("createChannelAccountSchema", () => {
         app_secret: "s".repeat(32),
       }).success
     ).toBe(true);
+  });
+
+  it("requires SMS API key and signing public key and does not require a verify token", async () => {
+    const { createChannelAccountSchema } = await import("@/modules/channels/schema");
+    expect(
+      createChannelAccountSchema.safeParse({
+        channel: "sms",
+        provider_destination_id: "+17735550001",
+      }).success
+    ).toBe(false);
+    expect(
+      createChannelAccountSchema.safeParse({
+        channel: "sms",
+        provider_destination_id: "+17735550001",
+        access_token: "KEY" + "t".repeat(40),
+        webhook_verify_token: "verify",
+      }).success
+    ).toBe(false);
+    const signingSecret = Buffer.alloc(32, 7).toString("base64");
+    const parsed = createChannelAccountSchema.safeParse({
+      channel: "sms",
+      provider_destination_id: "+17735550001",
+      access_token: "KEY" + "t".repeat(40),
+      webhook_signing_secret: signingSecret,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.channel).toBe("sms");
+      expect(parsed.data.webhook_verify_token).toBeUndefined();
+    }
+  });
+
+  it("does not weaken Email or WhatsApp credential requirements for SMS", async () => {
+    const { createChannelAccountSchema } = await import("@/modules/channels/schema");
+    expect(
+      createChannelAccountSchema.safeParse({
+        channel: "email",
+        provider_destination_id: "sales@acme.example",
+        access_token: "re_" + "x".repeat(40),
+        webhook_signing_secret: "p".repeat(44),
+      }).success
+    ).toBe(false);
+    expect(
+      createChannelAccountSchema.safeParse({
+        channel: "whatsapp",
+        provider_destination_id: "123456789012345",
+        access_token: "EAAG." + "x".repeat(200),
+        app_secret: "s".repeat(32),
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe("SMS adapter isolation", () => {
+  const adapterFiles = [
+    "src/modules/channels/adapters/sms/inbound.ts",
+    "src/modules/channels/adapters/sms/delivery.ts",
+    "src/modules/channels/adapters/sms/parse.ts",
+    "src/modules/channels/adapters/sms/signature.ts",
+    "src/modules/channels/adapters/sms/errors.ts",
+    "src/modules/channels/adapters/sms/constants.ts",
+  ];
+
+  it("does not import AI, HITL, CRM persistence, or job enqueue", () => {
+    for (const relative of adapterFiles) {
+      const source = readFileSync(resolve(process.cwd(), relative), "utf8");
+      const code = source
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("*") && !line.trim().startsWith("//"))
+        .join("\n");
+      expect(code).not.toContain("processConversationMessage");
+      expect(code).not.toContain("decideAiAction");
+      expect(code).not.toContain("escalateToHuman");
+      expect(code).not.toContain("resumeAI");
+      expect(code).not.toContain("from \"@/modules/ai/");
+      expect(code).not.toContain("from \"@/modules/ai/action-center");
+      expect(code).not.toContain("persist_channel_inbound");
+      expect(code).not.toContain("enqueueAiExecutionJob");
+      expect(code).not.toContain("enqueueChannelDelivery");
+      expect(code).not.toContain("TELNYX_API_KEY");
+      expect(code).not.toContain("process.env");
+    }
+  });
+
+  it("SMS inbound performs no HTTP and delivery uses fetch against Telnyx only", () => {
+    const inbound = readFileSync(
+      resolve(process.cwd(), "src/modules/channels/adapters/sms/inbound.ts"),
+      "utf8"
+    );
+    const delivery = readFileSync(
+      resolve(process.cwd(), "src/modules/channels/adapters/sms/delivery.ts"),
+      "utf8"
+    );
+    expect(inbound).not.toContain("fetch(");
+    expect(inbound).not.toContain("telnyx.com");
+    expect(delivery).toContain("fetchFn");
+    expect(delivery).toContain("globalThis.fetch");
+    expect(delivery).toContain("api.telnyx.com");
+    expect(delivery).not.toContain("TELNYX_API_KEY");
+    expect(inbound).not.toContain("TELNYX_API_KEY");
   });
 });

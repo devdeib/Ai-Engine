@@ -1,13 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { logger } from "@/lib/logger";
-import {
-  createEmailDeliveryAdapter,
-  emailOutboundSubject,
-} from "@/modules/channels/adapters/email/delivery";
-import {
-  EMAIL_IDEMPOTENCY_HEADER,
-  resendEmailsUrl,
-} from "@/modules/channels/adapters/email/constants";
+import { createSmsDeliveryAdapter } from "@/modules/channels/adapters/sms/delivery";
+import { telnyxMessagesUrl } from "@/modules/channels/adapters/sms/constants";
 import { channelDeliveryIdempotencyKey } from "@/modules/channels/constants";
 
 vi.mock("@/lib/logger", () => ({
@@ -23,10 +17,11 @@ const ORG_A = "aaaaaaaa-0000-0000-0000-000000000001";
 const ACCOUNT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const IDENTITY_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MSG_1 = "22222222-0000-4000-8000-0000000000bb";
-const MAILBOX = "sales@acme.example";
-const ACCESS_TOKEN = "re_" + "t".repeat(40);
-const DEST = "buyer@example.com";
+const FROM = "+17735550001";
+const DEST = "+17735550002";
+const ACCESS_TOKEN = "KEY" + "t".repeat(40);
 const BODY = "Hello from VG";
+const PROVIDER_ID = "403193d5-6802-43c2-bd39-10487abff809";
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -35,16 +30,16 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-describe("emailDeliveryAdapter", () => {
+describe("smsDeliveryAdapter", () => {
   const fetchImpl = vi.fn();
   const loadCredentials = vi.fn();
-  const adapter = createEmailDeliveryAdapter({ fetchImpl, loadCredentials });
+  const adapter = createSmsDeliveryAdapter({ fetchImpl, loadCredentials });
 
   beforeEach(() => {
     vi.clearAllMocks();
     loadCredentials.mockResolvedValue({
       accessToken: ACCESS_TOKEN,
-      mailbox: MAILBOX,
+      destination: FROM,
     });
   });
 
@@ -60,43 +55,37 @@ describe("emailDeliveryAdapter", () => {
     };
   }
 
-  it("sends plain text and returns the Resend email id", async () => {
-    fetchImpl.mockResolvedValue(
-      jsonResponse(200, { id: "49a3999c-0ce1-4ea6-ab68-afcd6dc2e794" })
-    );
+  it("sends plain text and returns Telnyx data.id", async () => {
+    fetchImpl.mockResolvedValue(jsonResponse(200, { data: { id: PROVIDER_ID } }));
 
     const result = await adapter.send(sendInput());
 
     expect(result).toEqual({
       ok: true,
-      providerMessageId: "49a3999c-0ce1-4ea6-ab68-afcd6dc2e794",
+      providerMessageId: PROVIDER_ID,
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(resendEmailsUrl());
-    expect(url).toBe("https://api.resend.com/emails");
-    expect(init.method).toBe("POST");
-    expect(init.headers).toEqual(
-      expect.objectContaining({
-        Authorization: `Bearer ${ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-        [EMAIL_IDEMPOTENCY_HEADER]: MSG_1,
-      })
-    );
+    expect(url).toBe(telnyxMessagesUrl());
+    expect(url).toBe("https://api.telnyx.com/v2/messages");
     expect(url).not.toContain(ACCESS_TOKEN);
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({
+      Authorization: `Bearer ${ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    });
+    expect(init.headers).not.toHaveProperty("Idempotency-Key");
     expect(JSON.parse(String(init.body))).toEqual({
-      from: MAILBOX,
+      from: FROM,
       to: DEST,
-      subject: emailOutboundSubject(BODY),
       text: BODY,
     });
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("api_key");
   });
 
-  it("sends the same messageId as Idempotency-Key on every retry", async () => {
+  it("keeps the same generic messageId idempotency key on retries", async () => {
     fetchImpl.mockImplementation(() =>
-      Promise.resolve(
-        jsonResponse(200, { id: "49a3999c-0ce1-4ea6-ab68-afcd6dc2e794" })
-      )
+      Promise.resolve(jsonResponse(200, { data: { id: PROVIDER_ID } }))
     );
     const first = sendInput();
     const second = sendInput();
@@ -104,14 +93,12 @@ describe("emailDeliveryAdapter", () => {
     await adapter.send(second);
     expect(first.idempotencyKey).toBe(MSG_1);
     expect(second.idempotencyKey).toBe(MSG_1);
-    const firstCall = fetchImpl.mock.calls[0] as [string, RequestInit];
-    const secondCall = fetchImpl.mock.calls[1] as [string, RequestInit];
-    expect(
-      (firstCall[1].headers as Record<string, string>)[EMAIL_IDEMPOTENCY_HEADER]
-    ).toBe(MSG_1);
-    expect(
-      (secondCall[1].headers as Record<string, string>)[EMAIL_IDEMPOTENCY_HEADER]
-    ).toBe(MSG_1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    for (const call of fetchImpl.mock.calls) {
+      const headers = call[1].headers as Record<string, string>;
+      expect(headers).not.toHaveProperty("Idempotency-Key");
+      expect(call[0]).not.toContain(ACCESS_TOKEN);
+    }
   });
 
   it("does not log the access token", async () => {
@@ -122,8 +109,8 @@ describe("emailDeliveryAdapter", () => {
     expect(logged).not.toContain("Bearer");
   });
 
-  it("treats a 2xx response without a provider id as terminal", async () => {
-    fetchImpl.mockResolvedValue(jsonResponse(200, { object: "email" }));
+  it("treats a 2xx response without data.id as terminal", async () => {
+    fetchImpl.mockResolvedValue(jsonResponse(200, { data: { record_type: "message" } }));
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
       errorCode: "MALFORMED_REQUEST",
@@ -150,30 +137,29 @@ describe("emailDeliveryAdapter", () => {
   });
 
   it("maps retryable HTTP statuses", async () => {
-    for (const status of [408, 429, 500, 502, 503]) {
-      fetchImpl.mockResolvedValueOnce(jsonResponse(status, { message: "x" }));
-      await expect(adapter.send(sendInput())).resolves.toEqual({
-        ok: false,
-        errorCode: `HTTP_${status}`,
-        retryable: true,
-      });
-    }
-  });
-
-  it("maps rate_limit_exceeded as retryable", async () => {
-    fetchImpl.mockResolvedValueOnce(
-      jsonResponse(429, { name: "rate_limit_exceeded" })
-    );
+    fetchImpl.mockResolvedValueOnce(jsonResponse(408, { errors: [] }));
+    await expect(adapter.send(sendInput())).resolves.toEqual({
+      ok: false,
+      errorCode: "HTTP_408",
+      retryable: true,
+    });
+    fetchImpl.mockResolvedValueOnce(jsonResponse(429, { errors: [] }));
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
       errorCode: "RATE_LIMITED",
+      retryable: true,
+    });
+    fetchImpl.mockResolvedValueOnce(jsonResponse(503, { errors: [] }));
+    await expect(adapter.send(sendInput())).resolves.toEqual({
+      ok: false,
+      errorCode: "HTTP_503",
       retryable: true,
     });
   });
 
   it("maps terminal auth and configuration errors without retrying", async () => {
     fetchImpl.mockResolvedValueOnce(
-      jsonResponse(401, { name: "invalid_api_key" })
+      jsonResponse(401, { errors: [{ code: "10011", title: "Invalid API key" }] })
     );
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
@@ -181,35 +167,35 @@ describe("emailDeliveryAdapter", () => {
       retryable: false,
     });
 
-    fetchImpl.mockResolvedValueOnce(jsonResponse(401, { message: "no" }));
+    fetchImpl.mockResolvedValueOnce(jsonResponse(401, { errors: [] }));
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
       errorCode: "UNAUTHORIZED",
       retryable: false,
     });
 
-    fetchImpl.mockResolvedValueOnce(jsonResponse(403, { message: "forbidden" }));
+    fetchImpl.mockResolvedValueOnce(jsonResponse(403, { errors: [] }));
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
       errorCode: "FORBIDDEN",
       retryable: false,
     });
 
-    fetchImpl.mockResolvedValueOnce(jsonResponse(400, { message: "bad" }));
+    fetchImpl.mockResolvedValueOnce(jsonResponse(400, { errors: [] }));
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
       errorCode: "MALFORMED_REQUEST",
       retryable: false,
     });
 
-    fetchImpl.mockResolvedValueOnce(jsonResponse(422, { name: "validation_error" }));
+    fetchImpl.mockResolvedValueOnce(jsonResponse(422, { errors: [] }));
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
       errorCode: "MALFORMED_REQUEST",
       retryable: false,
     });
 
-    fetchImpl.mockResolvedValueOnce(jsonResponse(404, { name: "not_found" }));
+    fetchImpl.mockResolvedValueOnce(jsonResponse(404, { errors: [{ title: "not_found" }] }));
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
       errorCode: "INVALID_DESTINATION",

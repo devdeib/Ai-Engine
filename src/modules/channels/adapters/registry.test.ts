@@ -7,6 +7,8 @@ import {
 } from "@/modules/channels/adapters/registry";
 import { emailDeliveryAdapter } from "@/modules/channels/adapters/email/delivery";
 import { emailInboundAdapter } from "@/modules/channels/adapters/email/inbound";
+import { smsDeliveryAdapter } from "@/modules/channels/adapters/sms/delivery";
+import { smsInboundAdapter } from "@/modules/channels/adapters/sms/inbound";
 import { testDeliveryAdapter } from "@/modules/channels/adapters/test-delivery";
 import { testInboundAdapter } from "@/modules/channels/adapters/test-inbound";
 import { whatsappDeliveryAdapter } from "@/modules/channels/adapters/whatsapp/delivery";
@@ -37,6 +39,17 @@ describe("channel adapter registry", () => {
     expect(getDeliveryAdapter("email")).not.toBe(whatsappDeliveryAdapter);
   });
 
+  it("resolves SMS to the SMS adapters without falling back to Test, WhatsApp, or Email", () => {
+    expect(getInboundAdapter("sms")).toBe(smsInboundAdapter);
+    expect(getDeliveryAdapter("sms")).toBe(smsDeliveryAdapter);
+    expect(getInboundAdapter("sms")).not.toBe(testInboundAdapter);
+    expect(getDeliveryAdapter("sms")).not.toBe(testDeliveryAdapter);
+    expect(getInboundAdapter("sms")).not.toBe(whatsappInboundAdapter);
+    expect(getDeliveryAdapter("sms")).not.toBe(whatsappDeliveryAdapter);
+    expect(getInboundAdapter("sms")).not.toBe(emailInboundAdapter);
+    expect(getDeliveryAdapter("sms")).not.toBe(emailDeliveryAdapter);
+  });
+
   it("fails safely for an unsupported inbound channel without falling back to test", () => {
     expect(() => getInboundAdapter("in_app")).toThrow(UnsupportedChannelError);
     expect(() => getInboundAdapter("unknown")).toThrow(UnsupportedChannelError);
@@ -54,5 +67,6 @@ describe("channel adapter registry", () => {
     expect(isExternalChannel("test")).toBe(true);
     expect(isExternalChannel("whatsapp")).toBe(true);
     expect(isExternalChannel("email")).toBe(true);
+    expect(isExternalChannel("sms")).toBe(true);
   });
 });

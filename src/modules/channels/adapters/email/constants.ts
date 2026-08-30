@@ -1,6 +1,6 @@
 /**
  * Resend Email channel configuration. Isolated from WhatsApp and test HMAC.
- * 5.3A locks URLs and headers; live HTTP send/receive is 5.3B.
+ * Live HTTP uses fetch against these URLs. No Resend SDK.
  */
 
 export const EMAIL_SVIX_ID_HEADER = "svix-id";
@@ -14,8 +14,8 @@ export const EMAIL_RECEIVED_EVENT = "email.received";
 
 export const RESEND_API_HOST = "https://api.resend.com";
 export const EMAIL_IDEMPOTENCY_HEADER = "Idempotency-Key";
-
-export const EMAIL_SEND_NOT_IMPLEMENTED = "EMAIL_SEND_NOT_IMPLEMENTED";
+export const EMAIL_API_TIMEOUT_MS = 15_000;
+export const EMAIL_SUBJECT_MAX_LENGTH = 78;
 
 export function resendEmailsUrl(): string {
   return `${RESEND_API_HOST}/emails`;

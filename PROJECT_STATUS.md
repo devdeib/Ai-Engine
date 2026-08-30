@@ -1,14 +1,21 @@
 # PROJECT_STATUS.md — Virtual Gravity AI Sales Engine
 
-> **Live status (2026-08-27): Phase 5.3A Email contract/scaffold.**
-> WhatsApp Cloud API is text-only. Email is structurally registered (Resend)
-> but live send/receive HTTP is Phase 5.3B. SMS, media, templates, and receipts
-> are not implemented. Channel delivery is at-least-once (not exactly-once).
+> **Live status (2026-08-28): Phase 5.4B Telnyx SMS inbound + outbound implemented.**
+> WhatsApp Cloud API is text-only. Email is text-only Resend (no HTML, media,
+> attachments, templates, or campaigns). SMS is text-only Telnyx (Ed25519
+> inbound verify + POST /v2/messages outbound). Channel delivery is
+> at-least-once (not exactly-once). Telnyx POST /v2/messages does not document
+> Idempotency-Key; retries may duplicate a send. Tests use mocked/injected
+> HTTP; there are no live Resend, Meta, or Telnyx integration tests. SQL race
+> tests remain static/mocked. MMS, media, receipts, templates, and campaigns
+> remain out of scope.
+> The numbered sections below are the original pre-initialization snapshot and
+> are not a live inventory of the repository.
 > The numbered sections below are the original pre-initialization snapshot and
 > are not a live inventory of the repository.
 
-> Last updated: 2026-08-27
-> Phase: 5.3A (Email contract + adapter scaffold)
+> Last updated: 2026-08-28
+> Phase: 5.4B (Telnyx SMS inbound + outbound)
 
 ---
 
@@ -89,9 +96,8 @@ Everything. The following is the complete product backlog at this point:
 - [ ] Website chat widget
 
 ### Communication Channels (Phase 5)
-- [ ] Email integration
+- [x] Email integration — Phase 5.3B text-only Resend inbound (Svix + Receiving API) and outbound (`POST /emails`, Idempotency-Key = messageId). HTML, attachments, templates, campaigns, and live Resend integration tests are out of scope.
 - [x] WhatsApp integration (Business API) — Phase 5.2B text-only Cloud API. Media, templates, receipts, and SMS are out of scope.
-- [ ] Email integration — Phase 5.3A locked Resend contract + scaffold; live send/receive is 5.3B.
 
 ### Analytics & Billing (Phase 6)
 - [ ] Analytics dashboard (leads funnel, conversion rates, agent performance)

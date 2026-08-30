@@ -61,6 +61,7 @@ describe("conversationChannelSchema", () => {
   it("rejects an unknown channel", () => {
     expect(conversationChannelSchema.safeParse("whatsapp").success).toBe(false);
     expect(conversationChannelSchema.safeParse("email").success).toBe(false);
+    expect(conversationChannelSchema.safeParse("sms").success).toBe(false);
   });
 });
 

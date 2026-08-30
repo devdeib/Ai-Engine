@@ -479,3 +479,96 @@ describe("createEmailChannelAccount", () => {
   });
 });
 
+describe("createSmsChannelAccount", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireOrgMembership).mockResolvedValue({} as never);
+  });
+
+  it("stores SMS credentials off the public row and never returns them", async () => {
+    const accessToken = "KEY" + "x".repeat(40);
+    const signingSecret = Buffer.alloc(32, 7).toString("base64");
+    const insertAccount = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            organization_id: ORG_A,
+            channel: "sms",
+            status: "active",
+            provider_destination_id: "+17735550001",
+            created_by_user_id: USER_1,
+            created_at: "2026-08-28T00:00:00Z",
+            updated_at: "2026-08-28T00:00:00Z",
+          },
+          error: null,
+        }),
+      }),
+    });
+    const insertSecret = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") return { insert: insertAccount };
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_account_secrets") return { insert: insertSecret };
+        return {};
+      }),
+    } as unknown as ReturnType<typeof createAdminClient>);
+
+    const created = await createChannelAccount(ORG_A, USER_1, {
+      channel: "sms",
+      provider_destination_id: "+1 (773) 555-0001",
+      access_token: accessToken,
+      webhook_signing_secret: signingSecret,
+    });
+
+    expect(created).not.toHaveProperty("webhookSecret");
+    expect(created).not.toHaveProperty("webhookSigningSecret");
+    expect(JSON.stringify(created)).not.toContain(accessToken);
+    expect(JSON.stringify(created)).not.toContain(signingSecret);
+    expect(JSON.stringify(insertAccount.mock.calls[0]?.[0])).not.toContain("KEY");
+    expect(insertAccount.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        channel: "sms",
+        provider_destination_id: "+17735550001",
+      })
+    );
+    expect(insertSecret).toHaveBeenCalledWith({
+      channel_account_id: created.id,
+      organization_id: ORG_A,
+      webhook_secret: signingSecret,
+      provider_access_token: accessToken,
+    });
+    expect(insertSecret.mock.calls[0]?.[0]).not.toHaveProperty(
+      "webhook_verify_token"
+    );
+  });
+
+  it("rejects a destination that is not a canonical E.164 number", async () => {
+    await expect(
+      createChannelAccount(ORG_A, USER_1, {
+        channel: "sms",
+        provider_destination_id: "7735550001",
+        access_token: "KEY" + "t".repeat(40),
+        webhook_signing_secret: Buffer.alloc(32, 7).toString("base64"),
+      })
+    ).rejects.toThrow("Invalid channel account data");
+  });
+
+  it("rejects non-members", async () => {
+    vi.mocked(requireOrgMembership).mockRejectedValue(new TenantAccessError());
+    await expect(
+      createChannelAccount(ORG_A, USER_1, {
+        channel: "sms",
+        provider_destination_id: "+17735550001",
+        access_token: "KEY" + "t".repeat(40),
+        webhook_signing_secret: Buffer.alloc(32, 7).toString("base64"),
+      })
+    ).rejects.toBeInstanceOf(TenantAccessError);
+  });
+});
+
