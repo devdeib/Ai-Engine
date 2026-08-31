@@ -66,6 +66,7 @@ import { enqueueOutboundDeliveryIfExternal } from "@/modules/channels/delivery/e
 import { MockAiProvider } from "@/modules/ai/providers/mock";
 import { AiMalformedResponseError, AiProviderError } from "@/modules/ai/errors";
 import type { AiContext, AiProviderResponse } from "@/modules/ai/types";
+import { EMPTY_AI_SALES_PROFILE } from "@/modules/ai/types";
 import type { AiProvider } from "@/modules/ai/providers/types";
 import type { ConversationWithLead, LeadActivity, Message } from "@/lib/db/types";
 
@@ -106,7 +107,7 @@ const inbound: Message = {
 };
 
 const aiContext: AiContext = {
-  organization: { name: "Acme" },
+  organization: { name: "Acme", salesProfile: EMPTY_AI_SALES_PROFILE },
   lead: {
     firstName: "Ahmed",
     lastName: "Ali",

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { getCurrentProfile, getUserOrganizations } from "@/modules/auth/queries";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
+import { OrganizationSettingsForm } from "@/modules/organizations/components/organization-settings-form";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -18,7 +19,7 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Manage your account and organization settings.
+          Manage your account and the facts the AI uses for this company.
         </p>
       </div>
 
@@ -39,38 +40,35 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      {currentOrg && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Organization</CardTitle>
-            <CardDescription>
-              You are a{" "}
-              <span className="font-medium capitalize">{currentOrg.role}</span>{" "}
-              of this organization
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Name</span>
-              <span>{currentOrg.name}</span>
-            </div>
-            <div className="flex justify-between text-sm border-t pt-3">
-              <span className="text-muted-foreground">Slug</span>
-              <span className="font-mono text-xs">{currentOrg.slug}</span>
-            </div>
-            <div className="flex justify-between text-sm border-t pt-3">
-              <span className="text-muted-foreground">Created</span>
-              <span>{formatDate(currentOrg.created_at)}</span>
-            </div>
-            <div className="flex justify-between text-sm border-t pt-3">
-              <span className="text-muted-foreground">Organization ID</span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {currentOrg.id}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {currentOrg ? (
+        <>
+          <OrganizationSettingsForm
+            organizationId={currentOrg.id}
+            role={currentOrg.role}
+            initialName={currentOrg.name}
+          />
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Organization</CardTitle>
+              <CardDescription>
+                You are a{" "}
+                <span className="font-medium capitalize">{currentOrg.role}</span>{" "}
+                of this organization
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Slug</span>
+                <span className="font-mono text-xs">{currentOrg.slug}</span>
+              </div>
+              <div className="flex justify-between text-sm border-t pt-3">
+                <span className="text-muted-foreground">Created</span>
+                <span>{formatDate(currentOrg.created_at)}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -82,8 +80,8 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Account deletion, organization transfer, and data export will be
-            available in Phase 6.
+            Account deletion, organization transfer, and data export are not
+            part of this MVP.
           </p>
         </CardContent>
       </Card>

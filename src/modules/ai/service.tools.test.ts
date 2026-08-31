@@ -72,6 +72,7 @@ import { executeCreateFollowUp, requestCreateAppointment } from "@/modules/ai/ac
 import { processConversationMessage } from "@/modules/ai/service";
 import { MockAiProvider } from "@/modules/ai/providers/mock";
 import type { AiContext } from "@/modules/ai/types";
+import { EMPTY_AI_SALES_PROFILE } from "@/modules/ai/types";
 import type { ConversationWithLead, Lead, LeadActivity, Message } from "@/lib/db/types";
 
 const ORG_A = "aaaaaaaa-0000-0000-0000-000000000001";
@@ -111,7 +112,7 @@ const inbound: Message = {
 };
 
 const aiContext: AiContext = {
-  organization: { name: "Acme" },
+  organization: { name: "Acme", salesProfile: EMPTY_AI_SALES_PROFILE },
   lead: {
     firstName: "Ahmed",
     lastName: "Ali",

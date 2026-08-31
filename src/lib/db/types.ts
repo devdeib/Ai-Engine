@@ -26,6 +26,9 @@
  *   20260827000005_whatsapp_channel.sql
  *   20260827000006_email_channel.sql
  *   20260828000001_sms_channel.sql
+ *   20260830000001_channel_account_lifecycle_rls.sql
+ *   20260830000002_channel_identity_attach.sql
+ *   20260831000001_organization_sales_profiles.sql
  *
  * Re-generate (or update manually) whenever the schema changes.
  */
@@ -215,6 +218,41 @@ export interface Database {
           user_id?: string;
           role?: MemberRole;
           invited_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      organization_sales_profiles: {
+        Row: {
+          id: string;
+          organization_id: string;
+          offering_summary: string | null;
+          service_area: string | null;
+          qualification_criteria: string | null;
+          constraints: string | null;
+          typical_next_step: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          offering_summary?: string | null;
+          service_area?: string | null;
+          qualification_criteria?: string | null;
+          constraints?: string | null;
+          typical_next_step?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          offering_summary?: string | null;
+          service_area?: string | null;
+          qualification_criteria?: string | null;
+          constraints?: string | null;
+          typical_next_step?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1008,6 +1046,8 @@ export type Organization =
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type OrganizationMember =
   Database["public"]["Tables"]["organization_members"]["Row"];
+export type OrganizationSalesProfile =
+  Database["public"]["Tables"]["organization_sales_profiles"]["Row"];
 export type Lead = Database["public"]["Tables"]["leads"]["Row"];
 export type LeadActivity =
   Database["public"]["Tables"]["lead_activities"]["Row"];

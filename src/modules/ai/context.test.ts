@@ -8,6 +8,9 @@ vi.mock("@/modules/organizations/queries", () => ({
   getOrganization: vi.fn(),
   getOrganizationName: vi.fn(),
 }));
+vi.mock("@/modules/organizations/sales-profile", () => ({
+  getOrganizationSalesProfile: vi.fn(),
+}));
 vi.mock("@/modules/leads/queries", () => ({
   getLead: vi.fn(),
 }));
@@ -28,7 +31,8 @@ vi.mock("@/modules/ai/pipeline", () => ({
   buildPipelineSnapshot: vi.fn(),
 }));
 
-import { getOrganization } from "@/modules/organizations/queries";
+import { getOrganization, getOrganizationName } from "@/modules/organizations/queries";
+import { getOrganizationSalesProfile } from "@/modules/organizations/sales-profile";
 import { getLead } from "@/modules/leads/queries";
 import {
   getConversation,
@@ -39,6 +43,7 @@ import { listLeadAppointments } from "@/modules/appointments/queries";
 import { listLeadActivities } from "@/modules/leads/activities/queries";
 import { buildPipelineSnapshot } from "@/modules/ai/pipeline";
 import { buildAiContext } from "@/modules/ai/context";
+import { EMPTY_AI_SALES_PROFILE } from "@/modules/ai/types";
 
 const ORG_A = "aaaaaaaa-0000-0000-0000-000000000001";
 const ORG_B = "bbbbbbbb-0000-0000-0000-000000000002";
@@ -154,6 +159,13 @@ function stubHappyPath() {
     contactEmailPresent: true,
     contactPhonePresent: true,
   });
+  vi.mocked(getOrganizationSalesProfile).mockResolvedValue({
+    offering_summary: null,
+    service_area: null,
+    qualification_criteria: null,
+    constraints: null,
+    typical_next_step: null,
+  });
 }
 
 describe("buildAiContext", () => {
@@ -170,6 +182,7 @@ describe("buildAiContext", () => {
     });
 
     expect(context.organization.name).toBe("Acme Realty");
+    expect(context.organization.salesProfile).toEqual(EMPTY_AI_SALES_PROFILE);
     expect(context.lead.firstName).toBe("Ahmed");
     expect(context.lead.email).toBe("ahmed@example.com");
     expect(context.messages).toHaveLength(1);
@@ -218,5 +231,59 @@ describe("buildAiContext", () => {
         conversationId: CONV_1,
       })
     ).rejects.toThrow(TenantAccessError);
+  });
+
+  it("includes the configured sales profile for the requested organization", async () => {
+    stubHappyPath();
+    vi.mocked(getOrganizationSalesProfile).mockResolvedValue({
+      offering_summary: "Waterfront apartments",
+      service_area: "Dubai Marina",
+      qualification_criteria: "Ask budget, timeline, and preferred area",
+      constraints: "Never invent prices or availability",
+      typical_next_step: "Arrange a viewing",
+    });
+
+    const context = await buildAiContext({
+      organizationId: ORG_A,
+      userId: USER_1,
+      conversationId: CONV_1,
+    });
+
+    expect(getOrganizationSalesProfile).toHaveBeenCalledWith(ORG_A, USER_1);
+    expect(getOrganizationSalesProfile).not.toHaveBeenCalledWith(ORG_B, expect.anything());
+    expect(context.organization.salesProfile).toEqual({
+      offeringSummary: "Waterfront apartments",
+      serviceArea: "Dubai Marina",
+      qualificationCriteria: "Ask budget, timeline, and preferred area",
+      constraints: "Never invent prices or availability",
+      typicalNextStep: "Arrange a viewing",
+    });
+    expect(JSON.stringify(context)).not.toContain(ORG_A);
+  });
+
+  it("does not invent business facts when the profile is empty", async () => {
+    stubHappyPath();
+    const context = await buildAiContext({
+      organizationId: ORG_A,
+      userId: USER_1,
+      conversationId: CONV_1,
+    });
+    expect(context.organization.salesProfile).toEqual(EMPTY_AI_SALES_PROFILE);
+    expect(context.organization.salesProfile.offeringSummary).toBeNull();
+    expect(context.organization.salesProfile.serviceArea).toBeNull();
+  });
+
+  it("loads the same organization's profile for trusted userId-null execution", async () => {
+    stubHappyPath();
+    vi.mocked(getOrganizationName).mockResolvedValue("Acme Realty");
+    const context = await buildAiContext({
+      organizationId: ORG_A,
+      userId: null,
+      conversationId: CONV_1,
+    });
+    expect(getOrganizationName).toHaveBeenCalledWith(ORG_A);
+    expect(getOrganizationSalesProfile).toHaveBeenCalledWith(ORG_A, null);
+    expect(context.organization.name).toBe("Acme Realty");
+    expect(context.organization.salesProfile).toEqual(EMPTY_AI_SALES_PROFILE);
   });
 });

@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { MockAiProvider } from "@/modules/ai/providers/mock";
 import type { AiContext } from "@/modules/ai/types";
+import { EMPTY_AI_SALES_PROFILE } from "@/modules/ai/types";
 
 const context: AiContext = {
-  organization: { name: "Acme" },
+  organization: { name: "Acme", salesProfile: EMPTY_AI_SALES_PROFILE },
   lead: {
     firstName: "Lina",
     lastName: "Hassan",

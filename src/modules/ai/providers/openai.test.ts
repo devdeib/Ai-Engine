@@ -4,9 +4,10 @@ import { AiMalformedResponseError, AiProviderError } from "@/modules/ai/errors";
 import { AiSalesAnalysisError } from "@/modules/ai/analysis/errors";
 import { MESSAGE_BODY_MAX } from "@/modules/conversations/schema";
 import type { AiContext } from "@/modules/ai/types";
+import { EMPTY_AI_SALES_PROFILE } from "@/modules/ai/types";
 
 const context: AiContext = {
-  organization: { name: "Acme" },
+  organization: { name: "Acme", salesProfile: EMPTY_AI_SALES_PROFILE },
   lead: {
     firstName: "Ahmed",
     lastName: "Ali",

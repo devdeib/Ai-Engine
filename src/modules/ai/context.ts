@@ -4,6 +4,7 @@
  */
 import "server-only";
 import { getOrganization, getOrganizationName } from "@/modules/organizations/queries";
+import { getOrganizationSalesProfile } from "@/modules/organizations/sales-profile";
 import { getLead } from "@/modules/leads/queries";
 import { getConversation } from "@/modules/conversations/queries";
 import { listRecentConversationMessages } from "@/modules/conversations/queries";
@@ -14,9 +15,23 @@ import {
   AI_CONTEXT_MESSAGE_LIMIT,
   AI_CONTEXT_SIDE_LIMIT,
   type AiContext,
+  type AiSalesProfileContext,
 } from "@/modules/ai/types";
 import { buildPipelineSnapshot } from "@/modules/ai/pipeline";
 import { mapAuthorTypeForAiContext } from "@/modules/ai/principal";
+import type { OrganizationSalesProfilePublic } from "@/modules/organizations/sales-profile-schema";
+
+function toAiSalesProfile(
+  profile: OrganizationSalesProfilePublic
+): AiSalesProfileContext {
+  return {
+    offeringSummary: profile.offering_summary,
+    serviceArea: profile.service_area,
+    qualificationCriteria: profile.qualification_criteria,
+    constraints: profile.constraints,
+    typicalNextStep: profile.typical_next_step,
+  };
+}
 
 export async function buildAiContext(input: {
   organizationId: string;
@@ -29,42 +44,53 @@ export async function buildAiContext(input: {
     input.conversationId
   );
 
-  const [organizationName, lead, messages, followUps, appointments, activities] =
-    await Promise.all([
-      input.userId
-        ? getOrganization(input.organizationId, input.userId).then(
-            (organization) => organization.name
-          )
-        : getOrganizationName(input.organizationId),
-      getLead(conversation.lead_id, input.organizationId, input.userId),
-      listRecentConversationMessages(
-        input.organizationId,
-        input.userId,
-        input.conversationId,
-        AI_CONTEXT_MESSAGE_LIMIT
-      ),
-      listLeadFollowUps(
-        input.organizationId,
-        input.userId,
-        conversation.lead_id,
-        { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
-      ),
-      listLeadAppointments(
-        input.organizationId,
-        input.userId,
-        conversation.lead_id,
-        { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
-      ),
-      listLeadActivities(
-        input.organizationId,
-        input.userId,
-        conversation.lead_id,
-        { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
-      ),
-    ]);
+  const [
+    organizationName,
+    salesProfile,
+    lead,
+    messages,
+    followUps,
+    appointments,
+    activities,
+  ] = await Promise.all([
+    input.userId
+      ? getOrganization(input.organizationId, input.userId).then(
+          (organization) => organization.name
+        )
+      : getOrganizationName(input.organizationId),
+    getOrganizationSalesProfile(input.organizationId, input.userId),
+    getLead(conversation.lead_id, input.organizationId, input.userId),
+    listRecentConversationMessages(
+      input.organizationId,
+      input.userId,
+      input.conversationId,
+      AI_CONTEXT_MESSAGE_LIMIT
+    ),
+    listLeadFollowUps(
+      input.organizationId,
+      input.userId,
+      conversation.lead_id,
+      { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
+    ),
+    listLeadAppointments(
+      input.organizationId,
+      input.userId,
+      conversation.lead_id,
+      { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
+    ),
+    listLeadActivities(
+      input.organizationId,
+      input.userId,
+      conversation.lead_id,
+      { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
+    ),
+  ]);
 
   return {
-    organization: { name: organizationName },
+    organization: {
+      name: organizationName,
+      salesProfile: toAiSalesProfile(salesProfile),
+    },
     lead: {
       firstName: lead.first_name,
       lastName: lead.last_name,

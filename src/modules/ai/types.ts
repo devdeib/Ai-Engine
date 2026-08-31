@@ -66,8 +66,25 @@ export interface AiActivityContext {
   createdAt: string;
 }
 
+export interface AiSalesProfileContext {
+  offeringSummary: string | null;
+  serviceArea: string | null;
+  qualificationCriteria: string | null;
+  constraints: string | null;
+  typicalNextStep: string | null;
+}
+
+export const EMPTY_AI_SALES_PROFILE: AiSalesProfileContext = {
+  offeringSummary: null,
+  serviceArea: null,
+  qualificationCriteria: null,
+  constraints: null,
+  typicalNextStep: null,
+};
+
 export interface AiOrganizationContext {
   name: string;
+  salesProfile: AiSalesProfileContext;
 }
 
 export interface AiPipelineSnapshot {
@@ -101,7 +118,7 @@ export const AI_CONTEXT_SIDE_LIMIT = 5;
 export const AI_DEFAULT_TIMEOUT_MS = 15_000;
 export const AI_DEFAULT_MAX_OUTPUT_TOKENS = 400;
 export const AI_MAX_TOOL_CALLS = 2;
-export const SALES_AGENT_PROMPT_VERSION = "SALES_AGENT_PROMPT_V1";
+export const SALES_AGENT_PROMPT_VERSION = "SALES_AGENT_PROMPT_V2";
 export const AI_TOOL_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const AI_TOOL_NAMES = [
