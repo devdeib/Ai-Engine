@@ -11,8 +11,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { env } from "@/lib/env";
 import { cn, formatDate } from "@/lib/utils";
 import type { MemberRole } from "@/lib/db/types";
+import { buildChannelWebhookUrl } from "@/modules/channels/webhook-url";
 
 const PAGE_SIZE = 20;
 
@@ -51,6 +53,22 @@ const STATUS_ACTIONS: { status: AccountStatus; label: string }[] = [
   { status: "paused", label: "Pause" },
   { status: "disabled", label: "Disable" },
 ];
+
+const DESTINATION_HINTS: Record<ChannelKind, string> = {
+  test: "A stable destination identifier for this test channel.",
+  whatsapp: "WhatsApp Phone Number ID from Meta, not the visible phone number.",
+  email: "The receiving mailbox for this channel, for example sales@example.com.",
+  sms: "The Telnyx receiving phone number in E.164 format, for example +15551234567.",
+};
+
+const WEBHOOK_SETUP_HINTS: Record<ChannelKind, string> = {
+  test: "Use the webhook URL above with the generated Test webhook secret.",
+  whatsapp:
+    "Configure the webhook URL above in the Meta app. GET challenge and POST events use the same URL.",
+  email:
+    "Configure the webhook URL above as the Resend webhook endpoint. Inbound email.received events are handled there.",
+  sms: "Configure the webhook URL above as the Telnyx messaging webhook.",
+};
 
 export interface ChannelAccountPublic {
   id: string;
@@ -154,6 +172,10 @@ function FieldError({ errors }: { errors?: string[] }) {
   );
 }
 
+function FieldHint({ children }: { children: string }) {
+  return <p className="text-xs text-muted-foreground">{children}</p>;
+}
+
 function readFieldErrors(body: unknown): Record<string, string[]> {
   if (!body || typeof body !== "object") return {};
   const error = (body as { error?: { details?: unknown } }).error;
@@ -166,10 +188,6 @@ function readFieldErrors(body: unknown): Record<string, string[]> {
     }
   }
   return next;
-}
-
-function webhookPath(accountId: string): string {
-  return `/api/v1/channels/accounts/${accountId}/webhook`;
 }
 
 function buildCreatePayload(fields: CreateFormFields): Record<string, string> {
@@ -249,6 +267,10 @@ export function ChannelAccountsClient({
 
   const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
   const [secretCopied, setSecretCopied] = useState(false);
+  const [webhookCopy, setWebhookCopy] = useState<{
+    accountId: string;
+    outcome: "copied" | "failed";
+  } | null>(null);
 
   const createInFlightRef = useRef(false);
   const statusInFlightRef = useRef(false);
@@ -436,6 +458,16 @@ export function ChannelAccountsClient({
     }
   }
 
+  async function copyWebhookUrl(accountId: string) {
+    const url = buildChannelWebhookUrl(env.NEXT_PUBLIC_APP_URL, accountId);
+    try {
+      await navigator.clipboard.writeText(url);
+      setWebhookCopy({ accountId, outcome: "copied" });
+    } catch {
+      setWebhookCopy({ accountId, outcome: "failed" });
+    }
+  }
+
   function dismissSecret() {
     setOneTimeSecret(null);
     setSecretCopied(false);
@@ -544,6 +576,7 @@ export function ChannelAccountsClient({
                 }
                 aria-invalid={!!createFieldErrors.provider_destination_id?.length}
               />
+              <FieldHint>{DESTINATION_HINTS[createFields.channel]}</FieldHint>
               <FieldError errors={createFieldErrors.provider_destination_id} />
             </div>
             {createFields.channel === "whatsapp" && (
@@ -561,6 +594,7 @@ export function ChannelAccountsClient({
                     }
                     aria-invalid={!!createFieldErrors.access_token?.length}
                   />
+                  <FieldHint>Meta WhatsApp Cloud API access token.</FieldHint>
                   <FieldError errors={createFieldErrors.access_token} />
                 </div>
                 <div className="space-y-1.5">
@@ -575,6 +609,9 @@ export function ChannelAccountsClient({
                     }
                     aria-invalid={!!createFieldErrors.webhook_verify_token?.length}
                   />
+                  <FieldHint>
+                    The token you choose in Meta when configuring the webhook challenge.
+                  </FieldHint>
                   <FieldError errors={createFieldErrors.webhook_verify_token} />
                 </div>
                 <div className="space-y-1.5">
@@ -590,11 +627,14 @@ export function ChannelAccountsClient({
                     }
                     aria-invalid={!!createFieldErrors.app_secret?.length}
                   />
+                  <FieldHint>
+                    Meta App Secret used to verify X-Hub-Signature-256.
+                  </FieldHint>
                   <FieldError errors={createFieldErrors.app_secret} />
                 </div>
               </>
             )}
-            {(createFields.channel === "email" || createFields.channel === "sms") && (
+            {createFields.channel === "email" && (
               <>
                 <div className="space-y-1.5">
                   <Label htmlFor="access-token">Access token</Label>
@@ -609,6 +649,7 @@ export function ChannelAccountsClient({
                     }
                     aria-invalid={!!createFieldErrors.access_token?.length}
                   />
+                  <FieldHint>Resend API key.</FieldHint>
                   <FieldError errors={createFieldErrors.access_token} />
                 </div>
                 <div className="space-y-1.5">
@@ -627,6 +668,50 @@ export function ChannelAccountsClient({
                     }
                     aria-invalid={!!createFieldErrors.webhook_signing_secret?.length}
                   />
+                  <FieldHint>
+                    Resend / Svix signing secret starting with whsec_.
+                  </FieldHint>
+                  <FieldError errors={createFieldErrors.webhook_signing_secret} />
+                </div>
+              </>
+            )}
+            {createFields.channel === "sms" && (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="access-token">Access token</Label>
+                  <Input
+                    id="access-token"
+                    type="password"
+                    autoComplete="off"
+                    value={createFields.access_token}
+                    disabled={isCreating}
+                    onChange={(event) =>
+                      updateCreateField("access_token", event.target.value)
+                    }
+                    aria-invalid={!!createFieldErrors.access_token?.length}
+                  />
+                  <FieldHint>Telnyx API key.</FieldHint>
+                  <FieldError errors={createFieldErrors.access_token} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="webhook-signing-secret">Webhook signing secret</Label>
+                  <Input
+                    id="webhook-signing-secret"
+                    type="password"
+                    autoComplete="off"
+                    value={createFields.webhook_signing_secret}
+                    disabled={isCreating}
+                    onChange={(event) =>
+                      updateCreateField(
+                        "webhook_signing_secret",
+                        event.target.value
+                      )
+                    }
+                    aria-invalid={!!createFieldErrors.webhook_signing_secret?.length}
+                  />
+                  <FieldHint>
+                    Telnyx Ed25519 public key used for webhook verification.
+                  </FieldHint>
                   <FieldError errors={createFieldErrors.webhook_signing_secret} />
                 </div>
               </>
@@ -704,8 +789,50 @@ export function ChannelAccountsClient({
                         Destination: {account.providerDestinationId || "—"}
                       </div>
                       <div>Created: {formatDate(account.createdAt)}</div>
-                      <div>Webhook: {webhookPath(account.id)}</div>
                     </dl>
+                    <div className="mt-2 space-y-2">
+                      <p className="text-xs font-medium text-foreground">
+                        Webhook URL
+                      </p>
+                      <code
+                        className="block break-all rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground"
+                        data-testid="channel-webhook-url"
+                      >
+                        {buildChannelWebhookUrl(
+                          env.NEXT_PUBLIC_APP_URL,
+                          account.id
+                        )}
+                      </code>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void copyWebhookUrl(account.id)}
+                        >
+                          <Copy className="h-4 w-4" />
+                          Copy webhook URL
+                        </Button>
+                        {webhookCopy?.accountId === account.id &&
+                          webhookCopy.outcome === "copied" && (
+                            <span className="text-xs text-muted-foreground">
+                              Copied
+                            </span>
+                          )}
+                        {webhookCopy?.accountId === account.id &&
+                          webhookCopy.outcome === "failed" && (
+                            <span
+                              className="text-xs text-destructive"
+                              role="alert"
+                            >
+                              Unable to copy webhook URL.
+                            </span>
+                          )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {WEBHOOK_SETUP_HINTS[account.channel]}
+                      </p>
+                    </div>
                   </div>
                   {canMutate && (
                     <div className="flex flex-wrap items-center gap-2">
@@ -802,6 +929,7 @@ export function ChannelAccountsClient({
                     }))
                   }
                 />
+                <FieldHint>Meta WhatsApp Cloud API access token.</FieldHint>
                 <FieldError errors={rotateFieldErrors.access_token} />
               </div>
               <div className="space-y-1.5">
@@ -818,6 +946,9 @@ export function ChannelAccountsClient({
                     }))
                   }
                 />
+                <FieldHint>
+                  The token you choose in Meta when configuring the webhook challenge.
+                </FieldHint>
                 <FieldError errors={rotateFieldErrors.webhook_verify_token} />
               </div>
               <div className="space-y-1.5">
@@ -835,6 +966,9 @@ export function ChannelAccountsClient({
                     }))
                   }
                 />
+                <FieldHint>
+                  Meta App Secret used to verify X-Hub-Signature-256.
+                </FieldHint>
                 <FieldError errors={rotateFieldErrors.app_secret} />
               </div>
             </div>
@@ -856,6 +990,11 @@ export function ChannelAccountsClient({
                     }))
                   }
                 />
+                <FieldHint>
+                  {rotateAccount.channel === "email"
+                    ? "Resend API key."
+                    : "Telnyx API key."}
+                </FieldHint>
                 <FieldError errors={rotateFieldErrors.access_token} />
               </div>
               <div className="space-y-1.5">
@@ -873,6 +1012,11 @@ export function ChannelAccountsClient({
                     }))
                   }
                 />
+                <FieldHint>
+                  {rotateAccount.channel === "email"
+                    ? "Resend / Svix signing secret starting with whsec_."
+                    : "Telnyx Ed25519 public key used for webhook verification."}
+                </FieldHint>
                 <FieldError errors={rotateFieldErrors.webhook_signing_secret} />
               </div>
             </div>

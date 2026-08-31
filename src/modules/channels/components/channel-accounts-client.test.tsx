@@ -2,13 +2,23 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
-import { ChannelAccountsClient } from "./channel-accounts-client";
 import type { MemberRole } from "@/lib/db/types";
+
+vi.mock("@/lib/env", () => ({
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: "https://test.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    NEXT_PUBLIC_APP_URL: "https://app.example.com",
+  },
+}));
+
+import { ChannelAccountsClient } from "./channel-accounts-client";
 
 const ORG_A = "aaaaaaaa-0000-0000-4000-000000000001";
 const ACCOUNT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ACCOUNT_ID_2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const WEBHOOK_SECRET = "one-time-webhook-secret-value-shown-once";
+const ABSOLUTE_WEBHOOK_URL = `https://app.example.com/api/v1/channels/accounts/${ACCOUNT_ID}/webhook`;
 
 const publicAccount = {
   id: ACCOUNT_ID,
@@ -190,11 +200,12 @@ describe("ChannelAccountsClient", () => {
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.getByText("Destination: dest-1")).toBeInTheDocument();
     expect(screen.getByText(/Created:/)).toBeInTheDocument();
+    expect(screen.getByTestId("channel-webhook-url")).toHaveTextContent(
+      ABSOLUTE_WEBHOOK_URL
+    );
     expect(
-      screen.getByText(
-        `Webhook: /api/v1/channels/accounts/${ACCOUNT_ID}/webhook`
-      )
-    ).toBeInTheDocument();
+      screen.queryByText(`Webhook: /api/v1/channels/accounts/${ACCOUNT_ID}/webhook`)
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("list-secret-must-not-render")
     ).not.toBeInTheDocument();
@@ -749,5 +760,169 @@ describe("ChannelAccountsClient", () => {
     expect(
       mutationCalls().filter((call) => String(call[0]).includes("/secrets/rotate"))
     ).toHaveLength(1);
+  });
+
+  it("renders and copies the absolute webhook URL without secrets", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderClient();
+    await waitFor(() => {
+      expect(screen.getByTestId("channel-webhook-url")).toHaveTextContent(
+        ABSOLUTE_WEBHOOK_URL
+      );
+    });
+    expect(screen.getByTestId("channel-webhook-url").textContent).not.toContain(
+      "secret"
+    );
+    expect(screen.getByTestId("channel-webhook-url").textContent).not.toContain(
+      ORG_A
+    );
+
+    await user.click(screen.getByRole("button", { name: "Copy webhook URL" }));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith(ABSOLUTE_WEBHOOK_URL);
+    expect(writeText).not.toHaveBeenCalledWith(WEBHOOK_SECRET);
+    expect(mutationCalls()).toHaveLength(0);
+  });
+
+  it("shows a copy failure without mutating the account", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockRejectedValue(new Error("denied")),
+      },
+    });
+    renderClient();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Copy webhook URL" })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: "Copy webhook URL" }));
+    await waitFor(() => {
+      expect(screen.getByText("Unable to copy webhook URL.")).toBeInTheDocument();
+    });
+    expect(mutationCalls()).toHaveLength(0);
+  });
+
+  it("shows Test destination and webhook setup guidance", async () => {
+    renderClient();
+    await waitFor(() => {
+      expect(screen.getByText("Test")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        "Use the webhook URL above with the generated Test webhook secret."
+      )
+    ).toBeInTheDocument();
+
+    const form = await openCreateForm(user);
+    expect(
+      within(form).getByText(
+        "A stable destination identifier for this test channel."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("shows WhatsApp Phone Number ID and Meta webhook guidance", async () => {
+    mockApis({
+      accounts: [{ ...publicAccount, channel: "whatsapp" }],
+    });
+    renderClient();
+    await waitFor(() => {
+      expect(screen.getByText("WhatsApp")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        "Configure the webhook URL above in the Meta app. GET challenge and POST events use the same URL."
+      )
+    ).toBeInTheDocument();
+
+    const form = await openCreateForm(user);
+    await user.selectOptions(within(form).getByLabelText("Channel"), "whatsapp");
+    expect(
+      within(form).getByText(
+        "WhatsApp Phone Number ID from Meta, not the visible phone number."
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(form).getByText("Meta WhatsApp Cloud API access token.")
+    ).toBeInTheDocument();
+    expect(
+      within(form).getByText(
+        "The token you choose in Meta when configuring the webhook challenge."
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(form).getByText(
+        "Meta App Secret used to verify X-Hub-Signature-256."
+      )
+    ).toBeInTheDocument();
+    expect(within(form).getByLabelText("Access token")).toBeInTheDocument();
+    expect(
+      within(form).getByLabelText("Webhook verify token")
+    ).toBeInTheDocument();
+    expect(within(form).getByLabelText("App secret")).toBeInTheDocument();
+  });
+
+  it("shows Email mailbox and Resend whsec_ guidance", async () => {
+    mockApis({
+      accounts: [{ ...publicAccount, channel: "email" }],
+    });
+    renderClient();
+    await waitFor(() => {
+      expect(screen.getByText("Email")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        "Configure the webhook URL above as the Resend webhook endpoint. Inbound email.received events are handled there."
+      )
+    ).toBeInTheDocument();
+
+    const form = await openCreateForm(user);
+    await user.selectOptions(within(form).getByLabelText("Channel"), "email");
+    expect(
+      within(form).getByText(
+        "The receiving mailbox for this channel, for example sales@example.com."
+      )
+    ).toBeInTheDocument();
+    expect(within(form).getByText("Resend API key.")).toBeInTheDocument();
+    expect(
+      within(form).getByText(
+        "Resend / Svix signing secret starting with whsec_."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("shows SMS E.164 and Telnyx Ed25519 guidance without HMAC wording", async () => {
+    mockApis({
+      accounts: [{ ...publicAccount, channel: "sms" }],
+    });
+    renderClient();
+    await waitFor(() => {
+      expect(screen.getByText("SMS")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        "Configure the webhook URL above as the Telnyx messaging webhook."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/HMAC/i)).not.toBeInTheDocument();
+
+    const form = await openCreateForm(user);
+    await user.selectOptions(within(form).getByLabelText("Channel"), "sms");
+    expect(
+      within(form).getByText(
+        "The Telnyx receiving phone number in E.164 format, for example +15551234567."
+      )
+    ).toBeInTheDocument();
+    expect(within(form).getByText("Telnyx API key.")).toBeInTheDocument();
+    expect(
+      within(form).getByText(
+        "Telnyx Ed25519 public key used for webhook verification."
+      )
+    ).toBeInTheDocument();
+    expect(within(form).queryByText(/HMAC/i)).not.toBeInTheDocument();
   });
 });
