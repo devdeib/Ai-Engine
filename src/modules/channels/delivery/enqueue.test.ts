@@ -1,11 +1,19 @@
 /**
  * Delivery enqueue reliability. Unique (organization_id, message_id) remains
  * idempotent; non-unique failures must surface to the caller.
+ *
+ * Writes use the server-only admin client. The session client must not insert
+ * channel_message_refs or channel_delivery_jobs.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import type { createAdminClient as createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(),
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(),
 }));
 vi.mock("@/modules/channels/delivery/schedule", () => ({
   scheduleChannelDeliveryProcessing: vi.fn(),
@@ -23,6 +31,7 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { scheduleChannelDeliveryProcessing } from "@/modules/channels/delivery/schedule";
 import {
   enqueueChannelDelivery,
@@ -44,19 +53,47 @@ function mockInserts(input: {
   const jobInsert = vi.fn().mockResolvedValue({
     error: input.jobError ?? null,
   });
+  const adminFrom = vi.fn().mockImplementation((table: string) => {
+    if (table === "channel_message_refs") return { insert: refInsert };
+    if (table === "channel_delivery_jobs") return { insert: jobInsert };
+    return {};
+  });
+  const sessionFrom = vi.fn().mockImplementation(() => {
+    throw new Error("session client must not write delivery rows");
+  });
+
+  vi.mocked(createAdminClient).mockReturnValue({
+    from: adminFrom,
+  } as unknown as ReturnType<typeof createAdminSupabaseClient>);
   vi.mocked(createClient).mockResolvedValue({
-    from: vi.fn().mockImplementation((table: string) => {
-      if (table === "channel_message_refs") return { insert: refInsert };
-      if (table === "channel_delivery_jobs") return { insert: jobInsert };
-      return {};
-    }),
-  } as unknown as Awaited<ReturnType<typeof createClient>>);
-  return { refInsert, jobInsert };
+    from: sessionFrom,
+  } as unknown as Awaited<ReturnType<typeof createServerSupabaseClient>>);
+
+  return { refInsert, jobInsert, adminFrom, sessionFrom };
 }
 
 describe("enqueueChannelDelivery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("inserts refs and jobs through the admin client, not the session client", async () => {
+    const { refInsert, jobInsert, adminFrom, sessionFrom } = mockInserts({});
+
+    await enqueueChannelDelivery({
+      organizationId: ORG_A,
+      channelAccountId: ACCOUNT_ID,
+      channelIdentityId: IDENTITY_ID,
+      messageId: MSG_1,
+    });
+
+    expect(createAdminClient).toHaveBeenCalledTimes(1);
+    expect(createClient).not.toHaveBeenCalled();
+    expect(sessionFrom).not.toHaveBeenCalled();
+    expect(adminFrom).toHaveBeenCalledWith("channel_message_refs");
+    expect(adminFrom).toHaveBeenCalledWith("channel_delivery_jobs");
+    expect(refInsert).toHaveBeenCalledTimes(1);
+    expect(jobInsert).toHaveBeenCalledTimes(1);
   });
 
   it("persists an outbound ref and delivery job on success", async () => {
@@ -73,6 +110,8 @@ describe("enqueueChannelDelivery", () => {
       expect.objectContaining({
         organization_id: ORG_A,
         message_id: MSG_1,
+        channel_account_id: ACCOUNT_ID,
+        channel_identity_id: IDENTITY_ID,
         direction: "outbound",
         delivery_status: "queued",
       })
@@ -171,39 +210,71 @@ describe("enqueueChannelDelivery", () => {
       messageId: MSG_1,
     });
 
+    expect(createAdminClient).not.toHaveBeenCalled();
+    expect(createClient).not.toHaveBeenCalled();
     expect(refInsert).not.toHaveBeenCalled();
     expect(jobInsert).not.toHaveBeenCalled();
+    expect(scheduleChannelDeliveryProcessing).not.toHaveBeenCalled();
   });
 
-  it("enqueues test-channel outbound conversations", async () => {
-    mockInserts({});
+  it("does not enqueue when channel_account_id is missing", async () => {
+    const { refInsert, jobInsert } = mockInserts({});
 
     await enqueueOutboundDeliveryIfExternal({
       organizationId: ORG_A,
       conversation: {
-        channel: "test",
-        channel_account_id: ACCOUNT_ID,
+        channel: "whatsapp",
+        channel_account_id: null,
         channel_identity_id: IDENTITY_ID,
       },
       messageId: MSG_1,
     });
 
-    expect(scheduleChannelDeliveryProcessing).toHaveBeenCalledTimes(1);
+    expect(createAdminClient).not.toHaveBeenCalled();
+    expect(refInsert).not.toHaveBeenCalled();
+    expect(jobInsert).not.toHaveBeenCalled();
+    expect(scheduleChannelDeliveryProcessing).not.toHaveBeenCalled();
   });
 
-  it("enqueues WhatsApp outbound conversations", async () => {
-    mockInserts({});
+  it("does not enqueue when channel_identity_id is missing", async () => {
+    const { refInsert, jobInsert } = mockInserts({});
 
     await enqueueOutboundDeliveryIfExternal({
       organizationId: ORG_A,
       conversation: {
         channel: "whatsapp",
         channel_account_id: ACCOUNT_ID,
-        channel_identity_id: IDENTITY_ID,
+        channel_identity_id: null,
       },
       messageId: MSG_1,
     });
 
-    expect(scheduleChannelDeliveryProcessing).toHaveBeenCalledTimes(1);
+    expect(createAdminClient).not.toHaveBeenCalled();
+    expect(refInsert).not.toHaveBeenCalled();
+    expect(jobInsert).not.toHaveBeenCalled();
+    expect(scheduleChannelDeliveryProcessing).not.toHaveBeenCalled();
   });
+
+  it.each(["test", "whatsapp", "email", "sms"] as const)(
+    "enqueues %s outbound conversations",
+    async (channel) => {
+      const { refInsert, jobInsert } = mockInserts({});
+
+      await enqueueOutboundDeliveryIfExternal({
+        organizationId: ORG_A,
+        conversation: {
+          channel,
+          channel_account_id: ACCOUNT_ID,
+          channel_identity_id: IDENTITY_ID,
+        },
+        messageId: MSG_1,
+      });
+
+      expect(createAdminClient).toHaveBeenCalledTimes(1);
+      expect(createClient).not.toHaveBeenCalled();
+      expect(refInsert).toHaveBeenCalledTimes(1);
+      expect(jobInsert).toHaveBeenCalledTimes(1);
+      expect(scheduleChannelDeliveryProcessing).toHaveBeenCalledTimes(1);
+    }
+  );
 });

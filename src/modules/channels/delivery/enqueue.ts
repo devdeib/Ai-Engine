@@ -3,7 +3,7 @@
  * Delivery is not authorization and is not an AI execution authority.
  */
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import { CHANNEL_DELIVERY_MAX_ATTEMPTS, isExternalChannel } from "@/modules/channels/constants";
 import { scheduleChannelDeliveryProcessing } from "@/modules/channels/delivery/schedule";
@@ -23,7 +23,7 @@ export async function enqueueChannelDelivery(input: {
   channelIdentityId: string;
   messageId: string;
 }): Promise<void> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const refInsert = await (supabase.from("channel_message_refs") as any).insert({
