@@ -6,7 +6,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { ConversationThread } from "./conversation-thread";
-import type { ConversationWithLead, Message } from "@/lib/db/types";
+import type {
+  ConversationWithLead,
+  MessageWithDeliveryStatus,
+} from "@/lib/db/types";
 
 vi.mock("next/link", () => ({
   default: ({
@@ -62,18 +65,22 @@ function makeConversation(
   };
 }
 
-function makeMessage(overrides: Partial<Message> = {}): Message {
+function makeMessage(
+  overrides: Partial<MessageWithDeliveryStatus> = {}
+): MessageWithDeliveryStatus {
+  const direction = overrides.direction ?? "outbound";
   return {
     id: "11111111-0000-4000-8000-0000000000aa",
     organization_id: ORG_A,
     conversation_id: CONV_1,
     author_user_id: "00000000-0000-4000-8000-000000000001",
     author_type: "human",
-    direction: "outbound",
+    direction,
     body: "Hello from us",
     in_reply_to_message_id: null,
     channel_identity_id: null,
     created_at: "2026-08-01T10:05:00Z",
+    delivery_status: direction === "inbound" ? null : "not_applicable",
     ...overrides,
   };
 }
@@ -161,6 +168,78 @@ describe("ConversationThread", () => {
     expect(items[0]).toHaveTextContent("Received");
     expect(items[1]).toHaveTextContent("Happy to help");
     expect(items[1]).toHaveTextContent("Sent");
+  });
+
+  it("shows Queued, Sent, and Failed for external outbound delivery states", async () => {
+    const queued = makeMessage({
+      id: "11111111-0000-4000-8000-0000000000aa",
+      body: "Queued body",
+      delivery_status: "queued",
+    });
+    global.fetch = vi.fn().mockResolvedValue(
+      ok([queued], { page: 1, limit: 20, count: 1 })
+    ) as unknown as typeof fetch;
+
+    render(
+      <ConversationThread
+        organizationId={ORG_A}
+        conversation={makeConversation({
+          channel: "whatsapp",
+          channel_identity_id: IDENTITY_ID,
+        })}
+        onBack={vi.fn()}
+        onConversationUpdated={vi.fn()}
+        onListRefresh={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("Queued")).toBeInTheDocument();
+    expect(screen.queryByText("Sent")).not.toBeInTheDocument();
+  });
+
+  it("shows Failed for a permanently failed external outbound message", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      ok(
+        [makeMessage({ delivery_status: "failed", body: "Did not send" })],
+        { page: 1, limit: 20, count: 1 }
+      )
+    ) as unknown as typeof fetch;
+
+    render(
+      <ConversationThread
+        organizationId={ORG_A}
+        conversation={makeConversation({ channel: "email" })}
+        onBack={vi.fn()}
+        onConversationUpdated={vi.fn()}
+        onListRefresh={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("Did not send")).toBeInTheDocument();
+    expect(screen.queryByText("Sent")).not.toBeInTheDocument();
+  });
+
+  it("does not show Sent when an external outbound has no delivery status", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      ok(
+        [makeMessage({ delivery_status: null, body: "Pending send" })],
+        { page: 1, limit: 20, count: 1 }
+      )
+    ) as unknown as typeof fetch;
+
+    render(
+      <ConversationThread
+        organizationId={ORG_A}
+        conversation={makeConversation({ channel: "sms" })}
+        onBack={vi.fn()}
+        onConversationUpdated={vi.fn()}
+        onListRefresh={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText("Queued")).toBeInTheDocument();
+    expect(screen.queryByText("Sent")).not.toBeInTheDocument();
   });
 
   it("shows a retry action when the thread fails to load", async () => {

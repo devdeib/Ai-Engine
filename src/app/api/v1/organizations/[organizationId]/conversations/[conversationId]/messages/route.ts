@@ -1,6 +1,6 @@
 /**
  * GET  /api/v1/organizations/:organizationId/conversations/:conversationId/messages
- *      — List messages (paginated, oldest → newest)
+ *      — List messages (paginated, oldest → newest), including public delivery_status
  *
  * POST /api/v1/organizations/:organizationId/conversations/:conversationId/messages
  *      — Append a human-authored message

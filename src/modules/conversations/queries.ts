@@ -15,12 +15,16 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { requireOrgMembership } from "@/modules/organizations/queries";
 import { NotFoundError } from "@/lib/errors";
+import { logger } from "@/lib/logger";
+import { isExternalChannel } from "@/modules/channels/constants";
 import type {
   Conversation,
   ConversationLeadSummary,
   ConversationStatus,
   ConversationWithLead,
   Message,
+  MessageWithDeliveryStatus,
+  PublicMessageDeliveryStatus,
 } from "@/lib/db/types";
 
 export interface ConversationsPagination {
@@ -179,20 +183,89 @@ export async function getConversation(
   return assertConversationInOrg(supabase, conversationId, organizationId);
 }
 
+const PUBLIC_DELIVERY_REF_SELECT = "message_id, organization_id, delivery_status";
+
+/**
+ * Maps a channel_message_refs.delivery_status onto the public inbox field.
+ * Missing / unknown / unreadable external refs become queued — never sent.
+ */
+export function publicMessageDeliveryStatus(input: {
+  conversationChannel: string;
+  direction: Message["direction"];
+  refOrganizationId?: string | null;
+  expectedOrganizationId: string;
+  refStatus?: string | null;
+}): PublicMessageDeliveryStatus {
+  if (input.direction === "inbound") {
+    return null;
+  }
+
+  if (!isExternalChannel(input.conversationChannel)) {
+    return "not_applicable";
+  }
+
+  if (
+    input.refOrganizationId != null &&
+    input.refOrganizationId !== input.expectedOrganizationId
+  ) {
+    return "queued";
+  }
+
+  if (input.refStatus === "failed") {
+    return "failed";
+  }
+
+  if (input.refStatus === "sent" || input.refStatus === "delivered") {
+    return "sent";
+  }
+
+  return "queued";
+}
+
+function attachDeliveryStatus(
+  messages: Message[],
+  conversationChannel: string,
+  organizationId: string,
+  refByMessageId: Map<
+    string,
+    { organization_id: string; delivery_status: string | null }
+  >
+): MessageWithDeliveryStatus[] {
+  return messages.map((message) => {
+    const ref = refByMessageId.get(message.id);
+    return {
+      ...message,
+      delivery_status: publicMessageDeliveryStatus({
+        conversationChannel,
+        direction: message.direction,
+        expectedOrganizationId: organizationId,
+        refOrganizationId: ref?.organization_id,
+        refStatus: ref?.delivery_status,
+      }),
+    };
+  });
+}
+
 /**
  * Returns messages for a conversation in chronological order (oldest → newest).
  * Secondary sort on id makes pagination deterministic when created_at ties.
+ * Outbound rows include a public `delivery_status` projection from
+ * channel_message_refs. Does not expose provider errors or job internals.
  */
 export async function listConversationMessages(
   organizationId: string,
   userId: string,
   conversationId: string,
   pagination: ConversationsPagination = { page: 1, limit: 20 }
-): Promise<Message[]> {
+): Promise<MessageWithDeliveryStatus[]> {
   await requireOrgMembership(organizationId, userId);
 
   const supabase = await createClient();
-  await assertConversationInOrg(supabase, conversationId, organizationId);
+  const conversation = await assertConversationInOrg(
+    supabase,
+    conversationId,
+    organizationId
+  );
 
   const { page, limit } = pagination;
   const offset = (page - 1) * limit;
@@ -210,7 +283,76 @@ export async function listConversationMessages(
     throw new Error(`Failed to fetch messages: ${error.message}`);
   }
 
-  return (data ?? []) as Message[];
+  const messages = (data ?? []) as Message[];
+  const outboundIds = messages
+    .filter((message) => message.direction === "outbound")
+    .map((message) => message.id);
+
+  if (
+    messages.length === 0 ||
+    !isExternalChannel(conversation.channel) ||
+    outboundIds.length === 0
+  ) {
+    return attachDeliveryStatus(
+      messages,
+      conversation.channel,
+      organizationId,
+      new Map()
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const refsQuery = await (supabase.from("channel_message_refs") as any)
+    .select(PUBLIC_DELIVERY_REF_SELECT)
+    .eq("organization_id", organizationId)
+    .eq("direction", "outbound")
+    .in("message_id", outboundIds);
+
+  if (refsQuery.error) {
+    logger.warn("Failed to fetch channel message delivery status", {
+      organizationId,
+      code:
+        typeof refsQuery.error.code === "string"
+          ? refsQuery.error.code
+          : "INTERNAL_ERROR",
+    });
+    return attachDeliveryStatus(
+      messages,
+      conversation.channel,
+      organizationId,
+      new Map()
+    );
+  }
+
+  const refByMessageId = new Map<
+    string,
+    { organization_id: string; delivery_status: string | null }
+  >();
+
+  for (const row of (refsQuery.data ?? []) as Array<{
+    message_id?: unknown;
+    organization_id?: unknown;
+    delivery_status?: unknown;
+    provider_error_code?: unknown;
+    last_error_code?: unknown;
+  }>) {
+    if (typeof row.message_id !== "string") continue;
+    if (typeof row.organization_id !== "string") continue;
+    if (!outboundIds.includes(row.message_id)) continue;
+
+    refByMessageId.set(row.message_id, {
+      organization_id: row.organization_id,
+      delivery_status:
+        typeof row.delivery_status === "string" ? row.delivery_status : null,
+    });
+  }
+
+  return attachDeliveryStatus(
+    messages,
+    conversation.channel,
+    organizationId,
+    refByMessageId
+  );
 }
 
 /**

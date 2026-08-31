@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { ConversationWithLead, Message } from "@/lib/db/types";
+import type {
+  ConversationWithLead,
+  MessageWithDeliveryStatus,
+} from "@/lib/db/types";
 import { ConversationHeader } from "@/modules/conversations/components/conversation-header";
 import { ConversationAiControls } from "@/modules/conversations/components/conversation-ai-controls";
 import { ConversationMessage } from "@/modules/conversations/components/conversation-message";
@@ -55,7 +58,7 @@ export function ConversationThread({
   onConversationUpdated,
   onListRefresh,
 }: ConversationThreadProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<MessageWithDeliveryStatus[]>([]);
   const [page, setPage] = useState(1);
   const [count, setCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,7 +94,7 @@ export function ConversationThread({
         throw new Error("Failed to load messages");
       }
       const json = (await res.json()) as {
-        data: Message[];
+        data: MessageWithDeliveryStatus[];
         meta: { page: number; limit: number; count: number };
       };
       setMessages(json.data);

@@ -12,7 +12,10 @@ import {
   NotFoundError,
   TenantAccessError,
 } from "@/lib/errors";
-import type { Message, OrganizationMember } from "@/lib/db/types";
+import type {
+  MessageWithDeliveryStatus,
+  OrganizationMember,
+} from "@/lib/db/types";
 import type { User } from "@supabase/auth-js";
 
 vi.mock("@/lib/api/auth", () => ({
@@ -60,18 +63,22 @@ const mockMember: OrganizationMember = {
 
 const mockOrgContext = { user: mockUser, member: mockMember, organizationId: ORG_A };
 
-function makeMessage(overrides: Partial<Message> = {}): Message {
+function makeMessage(
+  overrides: Partial<MessageWithDeliveryStatus> = {}
+): MessageWithDeliveryStatus {
+  const direction = overrides.direction ?? "outbound";
   return {
     id: MSG_1,
     organization_id: ORG_A,
     conversation_id: CONV_1,
     author_user_id: USER_1,
     author_type: "human",
-    direction: "outbound",
+    direction,
     body: "Hello",
     in_reply_to_message_id: null,
     channel_identity_id: null,
     created_at: "2026-08-20T10:05:00Z",
+    delivery_status: direction === "inbound" ? null : "not_applicable",
     ...overrides,
   };
 }
@@ -201,6 +208,23 @@ describe("GET /conversations/:conversationId/messages — successful retrieval",
     expect(body.data[0].body).toBe("First");
     expect(body.data[1].body).toBe("Second");
     expect(body.meta).toMatchObject({ page: 1, limit: 20, count: 2 });
+  });
+
+  it("returns delivery_status on listed messages and omits provider internals", async () => {
+    const queued: MessageWithDeliveryStatus = {
+      ...makeMessage(),
+      delivery_status: "queued",
+    };
+    vi.mocked(listConversationMessages).mockResolvedValue([queued]);
+
+    const res = await GET(makeGetRequest(BASE_PATH), makeContext());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data[0].delivery_status).toBe("queued");
+    expect(body.data[0].provider_error_code).toBeUndefined();
+    expect(body.data[0].last_error_code).toBeUndefined();
+    expect(body.data[0]).not.toHaveProperty("webhookSecret");
   });
 
   it("returns empty array and zero count when there are no messages", async () => {

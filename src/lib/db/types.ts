@@ -1059,6 +1059,23 @@ export interface ConversationWithLead extends Conversation {
   lead: ConversationLeadSummary | null;
 }
 
+/**
+ * Operator-visible outbound delivery projection on listed messages.
+ * Null for inbound. `not_applicable` for in-app outbound (no external delivery).
+ * External outbound uses queued | sent | failed only.
+ */
+export type PublicMessageDeliveryStatus =
+  | "not_applicable"
+  | "queued"
+  | "sent"
+  | "failed"
+  | null;
+
+/** Message row with the public delivery status for inbox display. */
+export interface MessageWithDeliveryStatus extends Message {
+  delivery_status: PublicMessageDeliveryStatus;
+}
+
 /** Follow-up row with the parent lead's display fields (org-wide queue). */
 export interface LeadFollowUpWithLead extends LeadFollowUp {
   lead: ConversationLeadSummary | null;

@@ -6,6 +6,7 @@ import type {
   ConversationChannel,
   ConversationLeadSummary,
   ConversationStatus,
+  MessageWithDeliveryStatus,
 } from "@/lib/db/types";
 
 export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
@@ -32,4 +33,35 @@ export function leadDisplayName(
   if (!lead) return "Unknown lead";
   const name = `${lead.first_name} ${lead.last_name}`.trim();
   return name || "Unknown lead";
+}
+
+/**
+ * Inbox attribution for a listed message.
+ * In-app outbound stays Sent (or AI). External outbound uses delivery truth.
+ * A missing external delivery status is Queued — never Sent.
+ */
+export function conversationMessageAttribution(
+  message: Pick<
+    MessageWithDeliveryStatus,
+    "direction" | "author_type" | "delivery_status"
+  >
+): string {
+  if (message.direction !== "outbound") {
+    return "Received";
+  }
+
+  const isAi = message.author_type === "ai";
+
+  switch (message.delivery_status) {
+    case "queued":
+      return isAi ? "AI · Queued" : "Queued";
+    case "sent":
+      return isAi ? "AI · Sent" : "Sent";
+    case "failed":
+      return isAi ? "AI · Failed" : "Failed";
+    case "not_applicable":
+      return isAi ? "AI" : "Sent";
+    default:
+      return isAi ? "AI · Queued" : "Queued";
+  }
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import { cn, formatDateTime } from "@/lib/utils";
-import type { Message } from "@/lib/db/types";
+import type { MessageWithDeliveryStatus } from "@/lib/db/types";
+import { conversationMessageAttribution } from "@/modules/conversations/lib/conversation-labels";
 
 export interface ConversationMessageProps {
-  message: Message;
+  message: MessageWithDeliveryStatus;
 }
 
 export function ConversationMessage({ message }: ConversationMessageProps) {
@@ -15,11 +16,7 @@ export function ConversationMessage({ message }: ConversationMessageProps) {
       className={cn("flex flex-col gap-1", isOutbound ? "items-end" : "items-start")}
     >
       <span className="text-[11px] font-medium text-muted-foreground">
-        {message.author_type === "ai"
-          ? "AI"
-          : isOutbound
-            ? "Sent"
-            : "Received"}
+        {conversationMessageAttribution(message)}
       </span>
       <div
         className={cn(
