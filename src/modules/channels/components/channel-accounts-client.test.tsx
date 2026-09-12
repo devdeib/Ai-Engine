@@ -88,6 +88,10 @@ function mockApis(options: MockOptions = {}) {
     const url = String(input);
     const method = (init?.method ?? "GET").toUpperCase();
 
+    if (url.includes("/telegram-webhook") && method === "POST") {
+      return jsonResponse({ data: { registered: true } }) as Response;
+    }
+
     if (url.includes("/secrets/rotate") && method === "POST") {
       if (rotateImpl) return rotateImpl(init) as Promise<Response>;
       if (rotateStatus >= 200 && rotateStatus < 300) {
@@ -481,6 +485,28 @@ describe("ChannelAccountsClient", () => {
       provider_destination_id: "+15551234567",
       access_token: "twilio-key",
       webhook_signing_secret: "b".repeat(32),
+    });
+  });
+
+  it("creates a Telegram account with destination and bot token only", async () => {
+    mockApis({ createData: { ...publicAccount, channel: "telegram" } });
+    renderClient();
+    await waitFor(() => {
+      expect(screen.getByText("Test")).toBeInTheDocument();
+    });
+    const form = await openCreateForm(user);
+    await user.selectOptions(within(form).getByLabelText("Channel"), "telegram");
+    setValue(within(form).getByLabelText("Destination"), "vg_sales_bot");
+    setValue(within(form).getByLabelText("Access token"), "123456:AAfake");
+    await user.click(
+      within(form).getByRole("button", { name: "Create account" })
+    );
+
+    await waitFor(() => expect(mutationCalls().length).toBe(1));
+    expect(parseBody(firstMutation()[1])).toEqual({
+      channel: "telegram",
+      provider_destination_id: "vg_sales_bot",
+      access_token: "123456:AAfake",
     });
   });
 
@@ -924,5 +950,49 @@ describe("ChannelAccountsClient", () => {
       )
     ).toBeInTheDocument();
     expect(within(form).queryByText(/HMAC/i)).not.toBeInTheDocument();
+  });
+
+  it("shows Telegram bot destination and webhook registration guidance", async () => {
+    mockApis({
+      accounts: [{ ...publicAccount, channel: "telegram" }],
+    });
+    renderClient();
+    await waitFor(() => {
+      expect(screen.getByText("Telegram")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(
+        "Creating or rotating this account registers the webhook with Telegram. Use Register webhook to repeat that setup. The webhook secret is generated and is never the bot token."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Register webhook" })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Register webhook" }));
+    await waitFor(() => {
+      expect(
+        mutationCalls().some((call) =>
+          String(call[0]).includes("/telegram-webhook")
+        )
+      ).toBe(true);
+    });
+
+    const form = await openCreateForm(user);
+    await user.selectOptions(within(form).getByLabelText("Channel"), "telegram");
+    expect(
+      within(form).getByText(
+        "The Telegram bot username or numeric bot id, for example my_sales_bot."
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(form).getByText(
+        "Telegram Bot Token from BotFather. Never the webhook secret."
+      )
+    ).toBeInTheDocument();
+    expect(within(form).getByLabelText("Access token")).toBeInTheDocument();
+    expect(
+      within(form).queryByLabelText("Webhook verify token")
+    ).not.toBeInTheDocument();
   });
 });

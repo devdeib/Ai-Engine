@@ -62,6 +62,7 @@ describe("conversationChannelSchema", () => {
     expect(conversationChannelSchema.safeParse("whatsapp").success).toBe(false);
     expect(conversationChannelSchema.safeParse("email").success).toBe(false);
     expect(conversationChannelSchema.safeParse("sms").success).toBe(false);
+    expect(conversationChannelSchema.safeParse("telegram").success).toBe(false);
   });
 });
 

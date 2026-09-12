@@ -23,6 +23,7 @@ const CHANNEL_LABELS = {
   whatsapp: "WhatsApp",
   email: "Email",
   sms: "SMS",
+  telegram: "Telegram",
 } as const;
 
 type ChannelKind = keyof typeof CHANNEL_LABELS;
@@ -32,6 +33,7 @@ const CHANNEL_OPTIONS: { value: ChannelKind; label: string }[] = [
   { value: "whatsapp", label: "WhatsApp" },
   { value: "email", label: "Email" },
   { value: "sms", label: "SMS" },
+  { value: "telegram", label: "Telegram" },
 ];
 
 type AccountStatus = "active" | "paused" | "disabled";
@@ -59,6 +61,7 @@ const DESTINATION_HINTS: Record<ChannelKind, string> = {
   whatsapp: "WhatsApp Phone Number ID from Meta, not the visible phone number.",
   email: "The receiving mailbox for this channel, for example sales@example.com.",
   sms: "The Telnyx receiving phone number in E.164 format, for example +15551234567.",
+  telegram: "The Telegram bot username or numeric bot id, for example my_sales_bot.",
 };
 
 const WEBHOOK_SETUP_HINTS: Record<ChannelKind, string> = {
@@ -68,6 +71,8 @@ const WEBHOOK_SETUP_HINTS: Record<ChannelKind, string> = {
   email:
     "Configure the webhook URL above as the Resend webhook endpoint. Inbound email.received events are handled there.",
   sms: "Configure the webhook URL above as the Telnyx messaging webhook.",
+  telegram:
+    "Creating or rotating this account registers the webhook with Telegram. Use Register webhook to repeat that setup. The webhook secret is generated and is never the bot token.",
 };
 
 export interface ChannelAccountPublic {
@@ -124,7 +129,13 @@ export interface ChannelAccountsClientProps {
 }
 
 function isChannelKind(value: unknown): value is ChannelKind {
-  return value === "test" || value === "whatsapp" || value === "email" || value === "sms";
+  return (
+    value === "test" ||
+    value === "whatsapp" ||
+    value === "email" ||
+    value === "sms" ||
+    value === "telegram"
+  );
 }
 
 function isAccountStatus(value: unknown): value is AccountStatus {
@@ -204,6 +215,9 @@ function buildCreatePayload(fields: CreateFormFields): Record<string, string> {
     payload.access_token = fields.access_token;
     payload.webhook_signing_secret = fields.webhook_signing_secret;
   }
+  if (fields.channel === "telegram") {
+    payload.access_token = fields.access_token;
+  }
   return payload;
 }
 
@@ -217,6 +231,11 @@ function buildRotatePayload(
       access_token: fields.access_token,
       webhook_verify_token: fields.webhook_verify_token.trim(),
       app_secret: fields.app_secret,
+    };
+  }
+  if (channel === "telegram") {
+    return {
+      access_token: fields.access_token,
     };
   }
   return {
@@ -265,6 +284,8 @@ export function ChannelAccountsClient({
   const [rotateFieldErrors, setRotateFieldErrors] = useState<Record<string, string[]>>({});
   const [rotateError, setRotateError] = useState<string | null>(null);
 
+  const [webhookSetupPendingId, setWebhookSetupPendingId] = useState<string | null>(null);
+
   const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
   const [secretCopied, setSecretCopied] = useState(false);
   const [webhookCopy, setWebhookCopy] = useState<{
@@ -275,6 +296,7 @@ export function ChannelAccountsClient({
   const createInFlightRef = useRef(false);
   const statusInFlightRef = useRef(false);
   const rotateInFlightRef = useRef(false);
+  const webhookSetupInFlightRef = useRef(false);
 
   const accountsUrl = `/api/v1/organizations/${organizationId}/channel-accounts`;
 
@@ -468,6 +490,30 @@ export function ChannelAccountsClient({
     }
   }
 
+  async function registerTelegramWebhook(accountId: string) {
+    if (!canMutate || webhookSetupInFlightRef.current) return;
+    webhookSetupInFlightRef.current = true;
+    setWebhookSetupPendingId(accountId);
+    setActionError(null);
+    try {
+      const res = await fetch(`${accountsUrl}/${accountId}/telegram-webhook`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!res.ok) {
+        setActionError(
+          mutationErrorMessage(res.status, "Unable to register the Telegram webhook.")
+        );
+        return;
+      }
+    } catch {
+      setActionError("Unable to register the Telegram webhook.");
+    } finally {
+      webhookSetupInFlightRef.current = false;
+      setWebhookSetupPendingId(null);
+    }
+  }
+
   function dismissSecret() {
     setOneTimeSecret(null);
     setSecretCopied(false);
@@ -476,7 +522,9 @@ export function ChannelAccountsClient({
   const hasPrev = page > 1;
   const hasNext = meta.count >= meta.limit;
   const rotateAccount = accounts.find((row) => row.id === rotateAccountId) ?? null;
-  const mutationBusy = Boolean(statusPending || rotatePendingId || isCreating);
+  const mutationBusy = Boolean(
+    statusPending || rotatePendingId || isCreating || webhookSetupPendingId
+  );
 
   return (
     <div className="space-y-6">
@@ -716,6 +764,24 @@ export function ChannelAccountsClient({
                 </div>
               </>
             )}
+            {createFields.channel === "telegram" && (
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="access-token">Access token</Label>
+                <Input
+                  id="access-token"
+                  type="password"
+                  autoComplete="off"
+                  value={createFields.access_token}
+                  disabled={isCreating}
+                  onChange={(event) =>
+                    updateCreateField("access_token", event.target.value)
+                  }
+                  aria-invalid={!!createFieldErrors.access_token?.length}
+                />
+                <FieldHint>Telegram Bot Token from BotFather. Never the webhook secret.</FieldHint>
+                <FieldError errors={createFieldErrors.access_token} />
+              </div>
+            )}
           </div>
           {createError && (
             <p className="text-sm text-destructive" role="alert">
@@ -862,6 +928,19 @@ export function ChannelAccountsClient({
                       >
                         Rotate credentials
                       </Button>
+                      {account.channel === "telegram" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={mutationBusy}
+                          onClick={() => void registerTelegramWebhook(account.id)}
+                        >
+                          {webhookSetupPendingId === account.id
+                            ? "Registering…"
+                            : "Register webhook"}
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1019,6 +1098,26 @@ export function ChannelAccountsClient({
                 </FieldHint>
                 <FieldError errors={rotateFieldErrors.webhook_signing_secret} />
               </div>
+            </div>
+          )}
+          {rotateAccount.channel === "telegram" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="rotate-access-token">Access token</Label>
+              <Input
+                id="rotate-access-token"
+                type="password"
+                autoComplete="off"
+                value={rotateFields.access_token}
+                disabled={Boolean(rotatePendingId)}
+                onChange={(event) =>
+                  setRotateFields((current) => ({
+                    ...current,
+                    access_token: event.target.value,
+                  }))
+                }
+              />
+              <FieldHint>Telegram Bot Token from BotFather. A new webhook secret is generated and registered.</FieldHint>
+              <FieldError errors={rotateFieldErrors.access_token} />
             </div>
           )}
           {rotateError && (

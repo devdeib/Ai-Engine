@@ -18,6 +18,7 @@ describe("conversation labels", () => {
     expect(CONVERSATION_CHANNEL_LABELS.whatsapp).toBe("WhatsApp");
     expect(CONVERSATION_CHANNEL_LABELS.email).toBe("Email");
     expect(CONVERSATION_CHANNEL_LABELS.sms).toBe("SMS");
+    expect(CONVERSATION_CHANNEL_LABELS.telegram).toBe("Telegram");
   });
 });
 

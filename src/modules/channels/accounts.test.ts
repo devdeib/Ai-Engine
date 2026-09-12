@@ -18,6 +18,10 @@ vi.mock("@/modules/channels/hmac", async (importOriginal) => {
     generateChannelWebhookSecret: vi.fn(() => "s".repeat(64)),
   };
 });
+vi.mock("@/modules/channels/adapters/telegram/setup", () => ({
+  registerTelegramWebhook: vi.fn().mockResolvedValue({ ok: true }),
+  setupTelegramChannelWebhook: vi.fn(),
+}));
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -26,6 +30,7 @@ import {
   requireOrgRole,
 } from "@/modules/organizations/queries";
 import { generateChannelWebhookSecret } from "@/modules/channels/hmac";
+import { registerTelegramWebhook } from "@/modules/channels/adapters/telegram/setup";
 import { logger } from "@/lib/logger";
 import {
   createTestChannelAccount,
@@ -585,6 +590,131 @@ describe("createSmsChannelAccount", () => {
   });
 });
 
+describe("createTelegramChannelAccount", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireOrgMembership).mockResolvedValue({} as never);
+    vi.mocked(registerTelegramWebhook).mockResolvedValue({ ok: true });
+  });
+
+  it("stores the bot token off the public row, generates a webhook secret, and never returns them", async () => {
+    const accessToken = "123456:AA" + "x".repeat(30);
+    const insertAccount = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            organization_id: ORG_A,
+            channel: "telegram",
+            status: "active",
+            provider_destination_id: "vg_sales_bot",
+            created_by_user_id: USER_1,
+            created_at: "2026-09-09T00:00:00Z",
+            updated_at: "2026-09-09T00:00:00Z",
+          },
+          error: null,
+        }),
+      }),
+    });
+    const insertSecret = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") return { insert: insertAccount };
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_account_secrets") return { insert: insertSecret };
+        return {};
+      }),
+    } as unknown as ReturnType<typeof createAdminClient>);
+
+    const created = await createChannelAccount(ORG_A, USER_1, {
+      channel: "telegram",
+      provider_destination_id: "@VG_Sales_Bot",
+      access_token: accessToken,
+    });
+
+    expect(created).not.toHaveProperty("webhookSecret");
+    expect(JSON.stringify(created)).not.toContain(accessToken);
+    expect(JSON.stringify(insertAccount.mock.calls[0]?.[0])).not.toContain(accessToken);
+    expect(insertAccount.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        channel: "telegram",
+        provider_destination_id: "vg_sales_bot",
+      })
+    );
+    expect(insertSecret).toHaveBeenCalledWith({
+      channel_account_id: created.id,
+      organization_id: ORG_A,
+      webhook_secret: "s".repeat(64),
+      provider_access_token: accessToken,
+    });
+    expect(registerTelegramWebhook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessToken,
+        secretToken: "s".repeat(64),
+      })
+    );
+    expect(String(vi.mocked(registerTelegramWebhook).mock.calls[0]?.[0].webhookUrl)).toContain(
+      created.id
+    );
+  });
+
+  it("rolls back when Telegram webhook registration fails", async () => {
+    vi.mocked(registerTelegramWebhook).mockResolvedValue({
+      ok: false,
+      errorCode: "INVALID_ACCESS_TOKEN",
+    });
+    const insertAccount = vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            organization_id: ORG_A,
+            channel: "telegram",
+            status: "active",
+            provider_destination_id: "vg_sales_bot",
+            created_by_user_id: USER_1,
+            created_at: "2026-09-09T00:00:00Z",
+            updated_at: "2026-09-09T00:00:00Z",
+          },
+          error: null,
+        }),
+      }),
+    });
+    const insertSecret = vi.fn().mockResolvedValue({ error: null });
+    const deleteAccount = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      }),
+    });
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") return { insert: insertAccount };
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_account_secrets") return { insert: insertSecret };
+        if (table === "channel_accounts") return { delete: deleteAccount };
+        return {};
+      }),
+    } as unknown as ReturnType<typeof createAdminClient>);
+
+    await expect(
+      createChannelAccount(ORG_A, USER_1, {
+        channel: "telegram",
+        provider_destination_id: "vg_sales_bot",
+        access_token: "123456:AA" + "x".repeat(30),
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(deleteAccount).toHaveBeenCalled();
+  });
+});
+
 const ACCOUNT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 function publicAccountRow(
@@ -813,6 +943,7 @@ describe("rotateChannelAccountSecrets", () => {
     vi.clearAllMocks();
     vi.mocked(requireOrgRole).mockResolvedValue({} as never);
     vi.mocked(generateChannelWebhookSecret).mockReturnValue("n".repeat(64));
+    vi.mocked(registerTelegramWebhook).mockResolvedValue({ ok: true });
   });
 
   it("replaces the Test webhook secret in the existing row and returns it once", async () => {
@@ -918,6 +1049,52 @@ describe("rotateChannelAccountSecrets", () => {
     expect(rotated.channel).toBe("whatsapp");
     expect(rotated.providerDestinationId).toBe("123456789012345");
     expect(rotated.status).toBe("active");
+  });
+
+  it("replaces Telegram credentials, regenerates the webhook secret, and never returns them", async () => {
+    const accessToken = "123456:AA" + "y".repeat(30);
+    const lookup = mockAccountLookup(
+      publicAccountRow({
+        channel: "telegram",
+        provider_destination_id: "vg_sales_bot",
+      })
+    );
+    const secretUpdate = mockScopedUpdate({
+      data: { channel_account_id: ACCOUNT_ID },
+      error: null,
+    });
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") return { select: lookup.select };
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_account_secrets") {
+          return { update: secretUpdate.update, insert: vi.fn() };
+        }
+        return {};
+      }),
+    } as unknown as ReturnType<typeof createAdminClient>);
+
+    const rotated = await rotateChannelAccountSecrets(ORG_A, USER_1, ACCOUNT_ID, {
+      access_token: accessToken,
+    });
+
+    expect(rotated).not.toHaveProperty("webhookSecret");
+    expect(JSON.stringify(rotated)).not.toContain(accessToken);
+    expect(JSON.stringify(rotated)).not.toContain("n".repeat(64));
+    expect(secretUpdate.update).toHaveBeenCalledWith({
+      webhook_secret: "n".repeat(64),
+      provider_access_token: accessToken,
+    });
+    expect(registerTelegramWebhook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessToken,
+        secretToken: "n".repeat(64),
+      })
+    );
   });
 
   it("replaces Email credentials and keeps whsec_ validation", async () => {

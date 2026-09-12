@@ -99,6 +99,7 @@ describe("WhatsApp channel migration contract", () => {
     expect(whatsapp).not.toContain("DROP POLICY");
     expect(whatsapp.toLowerCase()).not.toContain("'email'");
     expect(whatsapp.toLowerCase()).not.toContain("'sms'");
+    expect(whatsapp.toLowerCase()).not.toContain("'telegram'");
   });
 
   it("adds nullable WhatsApp secret columns without weakening webhook_secret length", () => {
@@ -129,6 +130,7 @@ describe("Email channel migration contract", () => {
     expect(email).not.toContain("DROP POLICY");
     expect(email).not.toContain("DROP CONSTRAINT");
     expect(email.toLowerCase()).not.toContain("'sms'");
+    expect(email.toLowerCase()).not.toContain("'telegram'");
     expect(email).not.toContain("DROP CONSTRAINT conversations_channel_scope_chk");
     expect(email).not.toContain("DROP INDEX");
     expect(email).not.toContain("ALTER TABLE");
@@ -166,6 +168,45 @@ describe("SMS channel migration contract", () => {
       "utf8"
     );
     expect(email.toLowerCase()).not.toContain("'sms'");
+  });
+});
+
+describe("Telegram channel migration contract", () => {
+  const telegram = readFileSync(
+    resolve(process.cwd(), "supabase/migrations/20260909000001_telegram_channel.sql"),
+    "utf8"
+  );
+
+  it("adds Telegram enum values additively without changing RLS, tables, or uniqueness", () => {
+    expect(telegram).toContain("ADD VALUE IF NOT EXISTS 'telegram'");
+    expect(telegram).toContain("ALTER TYPE public.conversation_channel");
+    expect(telegram).toContain("ALTER TYPE public.channel_kind");
+    expect(telegram).not.toContain("DROP TYPE");
+    expect(telegram).not.toContain("DISABLE ROW LEVEL SECURITY");
+    expect(telegram).not.toContain("DROP POLICY");
+    expect(telegram).not.toContain("DROP CONSTRAINT");
+    expect(telegram).not.toContain("CREATE TABLE");
+    expect(telegram).not.toContain("CREATE INDEX");
+    expect(telegram).not.toContain("DROP INDEX");
+    expect(telegram).not.toContain("ALTER TABLE");
+  });
+
+  it("does not appear in historical channel migrations", () => {
+    expect(enums.toLowerCase()).not.toContain("'telegram'");
+    expect(substrate.toLowerCase()).not.toContain("'telegram'");
+    expect(reliability.toLowerCase()).not.toContain("'telegram'");
+    expect(generalization.toLowerCase()).not.toContain("'telegram'");
+    expect(whatsapp.toLowerCase()).not.toContain("'telegram'");
+    const email = readFileSync(
+      resolve(process.cwd(), "supabase/migrations/20260827000006_email_channel.sql"),
+      "utf8"
+    );
+    const sms = readFileSync(
+      resolve(process.cwd(), "supabase/migrations/20260828000001_sms_channel.sql"),
+      "utf8"
+    );
+    expect(email.toLowerCase()).not.toContain("'telegram'");
+    expect(sms.toLowerCase()).not.toContain("'telegram'");
   });
 });
 

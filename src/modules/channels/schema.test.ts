@@ -94,6 +94,18 @@ describe("channel ingest source contract", () => {
       resolve(process.cwd(), "src/modules/channels/adapters/sms/delivery.ts"),
       "utf8"
     );
+    const telegramInbound = readFileSync(
+      resolve(process.cwd(), "src/modules/channels/adapters/telegram/inbound.ts"),
+      "utf8"
+    );
+    const telegramDelivery = readFileSync(
+      resolve(process.cwd(), "src/modules/channels/adapters/telegram/delivery.ts"),
+      "utf8"
+    );
+    const telegramSetup = readFileSync(
+      resolve(process.cwd(), "src/modules/channels/adapters/telegram/setup.ts"),
+      "utf8"
+    );
     const secrets = readFileSync(
       resolve(process.cwd(), "src/modules/channels/secrets.ts"),
       "utf8"
@@ -121,6 +133,9 @@ describe("channel ingest source contract", () => {
       emailDelivery,
       smsInbound,
       smsDelivery,
+      telegramInbound,
+      telegramDelivery,
+      telegramSetup,
       secrets,
     ]) {
       const code = source
@@ -287,6 +302,29 @@ describe("createChannelAccountSchema", () => {
         app_secret: "s".repeat(32),
       }).success
     ).toBe(false);
+  });
+
+  it("requires a Telegram bot token and generates no user-supplied webhook secret", async () => {
+    const { createChannelAccountSchema } = await import("@/modules/channels/schema");
+    expect(
+      createChannelAccountSchema.safeParse({
+        channel: "telegram",
+        provider_destination_id: "vg_sales_bot",
+      }).success
+    ).toBe(false);
+    const token = "123456:AA" + "x".repeat(30);
+    const parsed = createChannelAccountSchema.safeParse({
+      channel: "telegram",
+      provider_destination_id: "@VG_Sales_Bot",
+      access_token: token,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.channel).toBe("telegram");
+      expect(parsed.data.access_token).toBe(token);
+      expect(parsed.data.webhook_signing_secret).toBeUndefined();
+      expect(parsed.data.app_secret).toBeUndefined();
+    }
   });
 });
 
@@ -549,6 +587,14 @@ describe("parseChannelAccountRotateBody", () => {
         webhook_signing_secret: "p".repeat(44),
       }).success
     ).toBe(true);
+    expect(
+      parseChannelAccountRotateBody("telegram", "vg_sales_bot", {
+        access_token: "123456:AA" + "x".repeat(30),
+      }).success
+    ).toBe(true);
+    expect(
+      parseChannelAccountRotateBody("telegram", "vg_sales_bot", {}).success
+    ).toBe(false);
   });
 
   it("rejects Email credentials on SMS and WhatsApp credentials on Email", async () => {

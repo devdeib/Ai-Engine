@@ -12,6 +12,7 @@ import {
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { generateChannelWebhookSecret } from "@/modules/channels/hmac";
+import { env } from "@/lib/env";
 import {
   createChannelAccountSchema,
   parseChannelAccountRotateBody,
@@ -26,6 +27,9 @@ import {
 } from "@/modules/channels/map";
 import { normalizeEmailAddress } from "@/modules/channels/adapters/email/parse";
 import { normalizeSmsAddress } from "@/modules/channels/adapters/sms/parse";
+import { normalizeTelegramDestination } from "@/modules/channels/adapters/telegram/parse";
+import { registerTelegramWebhook } from "@/modules/channels/adapters/telegram/setup";
+import { buildChannelWebhookUrl } from "@/modules/channels/webhook-url";
 import type { ChannelAccount } from "@/lib/db/types";
 
 const CHANNEL_ACCOUNT_SELECT =
@@ -76,6 +80,13 @@ function secretReplacementForRotation(
     };
   }
 
+  if (parsed.channel === "telegram") {
+    return {
+      webhook_secret: generatedTestSecret ?? "",
+      provider_access_token: parsed.access_token?.trim() ?? "",
+    };
+  }
+
   return {
     webhook_secret: parsed.webhook_signing_secret ?? "",
     provider_access_token: parsed.access_token?.trim() ?? "",
@@ -105,6 +116,10 @@ export async function createChannelAccount(
 
   if (parsed.data.channel === "sms") {
     return createSmsChannelAccount(organizationId, userId, parsed.data);
+  }
+
+  if (parsed.data.channel === "telegram") {
+    return createTelegramChannelAccount(organizationId, userId, parsed.data);
   }
 
   if (parsed.data.channel === "test") {
@@ -251,6 +266,109 @@ export async function createSmsChannelAccount(
     }
 
     throw new Error("Failed to store channel account secret");
+  }
+
+  return toPublicChannelAccount(account);
+}
+
+export async function createTelegramChannelAccount(
+  organizationId: string,
+  userId: string,
+  input: CreateChannelAccountInput
+): Promise<ChannelAccountPublic> {
+  await requireOrgMembership(organizationId, userId);
+
+  const destination = normalizeTelegramDestination(input.provider_destination_id);
+  if (!destination) {
+    throw new ValidationError("Invalid channel account data", {
+      provider_destination_id: ["Destination is required"],
+    });
+  }
+
+  const accessToken = input.access_token?.trim() ?? "";
+  const webhookSecret = generateChannelWebhookSecret();
+  const supabase = await createClient();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase.from("channel_accounts") as any)
+    .insert({
+      organization_id: organizationId,
+      channel: "telegram",
+      status: "active",
+      provider_destination_id: destination,
+      created_by_user_id: userId,
+    })
+    .select()
+    .single();
+
+  if (isUniqueViolation(error)) {
+    throw new ConflictError("A channel account already exists for this destination");
+  }
+  if (error || !data) {
+    throw new Error("Failed to create channel account");
+  }
+
+  const account = data as ChannelAccount;
+  const admin = createAdminClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const secretInsert = await (admin.from("channel_account_secrets") as any).insert({
+    channel_account_id: account.id,
+    organization_id: organizationId,
+    webhook_secret: webhookSecret,
+    provider_access_token: accessToken,
+  });
+
+  if (secretInsert.error) {
+    logger.error("Failed to store channel account secret", {
+      organizationId,
+      code: secretInsert.error.code ?? "INTERNAL_ERROR",
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rollback = await (admin.from("channel_accounts") as any)
+      .delete()
+      .eq("id", account.id)
+      .eq("organization_id", organizationId);
+
+    if (rollback.error) {
+      logger.error("Failed to roll back channel account after secret insert failure", {
+        organizationId,
+        code: rollback.error.code ?? "INTERNAL_ERROR",
+      });
+    }
+
+    throw new Error("Failed to store channel account secret");
+  }
+
+  const registered = await registerTelegramWebhook({
+    accessToken,
+    secretToken: webhookSecret,
+    webhookUrl: buildChannelWebhookUrl(env.NEXT_PUBLIC_APP_URL, account.id),
+  });
+
+  if (!registered.ok) {
+    logger.error("Failed to register Telegram webhook", {
+      organizationId,
+      code: registered.errorCode,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rollback = await (admin.from("channel_accounts") as any)
+      .delete()
+      .eq("id", account.id)
+      .eq("organization_id", organizationId);
+
+    if (rollback.error) {
+      logger.error("Failed to roll back channel account after webhook setup failure", {
+        organizationId,
+        code: rollback.error.code ?? "INTERNAL_ERROR",
+      });
+    }
+
+    if (registered.errorCode === "INVALID_ACCESS_TOKEN") {
+      throw new ValidationError("Invalid channel account data", {
+        access_token: ["Access token is invalid"],
+      });
+    }
+    throw new Error("Failed to register Telegram webhook");
   }
 
   return toPublicChannelAccount(account);
@@ -493,11 +611,13 @@ export async function rotateChannelAccountSecrets(
     );
   }
 
-  const generatedTestSecret =
-    account.channel === "test" ? generateChannelWebhookSecret() : null;
+  const generatedWebhookSecret =
+    account.channel === "test" || account.channel === "telegram"
+      ? generateChannelWebhookSecret()
+      : null;
   const replacement = secretReplacementForRotation(
     parsed.data,
-    generatedTestSecret
+    generatedWebhookSecret
   );
 
   const admin = createAdminClient();
@@ -525,8 +645,28 @@ export async function rotateChannelAccountSecrets(
     throw new Error("Failed to rotate channel account secret");
   }
 
-  if (account.channel === "test" && generatedTestSecret) {
-    return toCreatedChannelAccount(account, generatedTestSecret);
+  if (account.channel === "telegram" && generatedWebhookSecret) {
+    const registered = await registerTelegramWebhook({
+      accessToken: parsed.data.access_token?.trim() ?? "",
+      secretToken: generatedWebhookSecret,
+      webhookUrl: buildChannelWebhookUrl(env.NEXT_PUBLIC_APP_URL, account.id),
+    });
+    if (!registered.ok) {
+      logger.error("Failed to register Telegram webhook", {
+        organizationId,
+        code: registered.errorCode,
+      });
+      if (registered.errorCode === "INVALID_ACCESS_TOKEN") {
+        throw new ValidationError("Invalid channel account data", {
+          access_token: ["Access token is invalid"],
+        });
+      }
+      throw new Error("Failed to register Telegram webhook");
+    }
+  }
+
+  if (account.channel === "test" && generatedWebhookSecret) {
+    return toCreatedChannelAccount(account, generatedWebhookSecret);
   }
 
   return toPublicChannelAccount(account);

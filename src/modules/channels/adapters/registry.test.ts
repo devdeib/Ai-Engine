@@ -9,6 +9,8 @@ import { emailDeliveryAdapter } from "@/modules/channels/adapters/email/delivery
 import { emailInboundAdapter } from "@/modules/channels/adapters/email/inbound";
 import { smsDeliveryAdapter } from "@/modules/channels/adapters/sms/delivery";
 import { smsInboundAdapter } from "@/modules/channels/adapters/sms/inbound";
+import { telegramDeliveryAdapter } from "@/modules/channels/adapters/telegram/delivery";
+import { telegramInboundAdapter } from "@/modules/channels/adapters/telegram/inbound";
 import { testDeliveryAdapter } from "@/modules/channels/adapters/test-delivery";
 import { testInboundAdapter } from "@/modules/channels/adapters/test-inbound";
 import { whatsappDeliveryAdapter } from "@/modules/channels/adapters/whatsapp/delivery";
@@ -50,6 +52,19 @@ describe("channel adapter registry", () => {
     expect(getDeliveryAdapter("sms")).not.toBe(emailDeliveryAdapter);
   });
 
+  it("resolves Telegram to the Telegram adapters without falling back to other providers", () => {
+    expect(getInboundAdapter("telegram")).toBe(telegramInboundAdapter);
+    expect(getDeliveryAdapter("telegram")).toBe(telegramDeliveryAdapter);
+    expect(getInboundAdapter("telegram")).not.toBe(testInboundAdapter);
+    expect(getDeliveryAdapter("telegram")).not.toBe(testDeliveryAdapter);
+    expect(getInboundAdapter("telegram")).not.toBe(whatsappInboundAdapter);
+    expect(getDeliveryAdapter("telegram")).not.toBe(whatsappDeliveryAdapter);
+    expect(getInboundAdapter("telegram")).not.toBe(emailInboundAdapter);
+    expect(getDeliveryAdapter("telegram")).not.toBe(emailDeliveryAdapter);
+    expect(getInboundAdapter("telegram")).not.toBe(smsInboundAdapter);
+    expect(getDeliveryAdapter("telegram")).not.toBe(smsDeliveryAdapter);
+  });
+
   it("fails safely for an unsupported inbound channel without falling back to test", () => {
     expect(() => getInboundAdapter("in_app")).toThrow(UnsupportedChannelError);
     expect(() => getInboundAdapter("unknown")).toThrow(UnsupportedChannelError);
@@ -68,5 +83,6 @@ describe("channel adapter registry", () => {
     expect(isExternalChannel("whatsapp")).toBe(true);
     expect(isExternalChannel("email")).toBe(true);
     expect(isExternalChannel("sms")).toBe(true);
+    expect(isExternalChannel("telegram")).toBe(true);
   });
 });

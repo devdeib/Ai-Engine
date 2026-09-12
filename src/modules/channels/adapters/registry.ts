@@ -5,6 +5,8 @@ import { emailDeliveryAdapter } from "@/modules/channels/adapters/email/delivery
 import { emailInboundAdapter } from "@/modules/channels/adapters/email/inbound";
 import { smsDeliveryAdapter } from "@/modules/channels/adapters/sms/delivery";
 import { smsInboundAdapter } from "@/modules/channels/adapters/sms/inbound";
+import { telegramDeliveryAdapter } from "@/modules/channels/adapters/telegram/delivery";
+import { telegramInboundAdapter } from "@/modules/channels/adapters/telegram/inbound";
 import { testDeliveryAdapter } from "@/modules/channels/adapters/test-delivery";
 import { testInboundAdapter } from "@/modules/channels/adapters/test-inbound";
 import { whatsappDeliveryAdapter } from "@/modules/channels/adapters/whatsapp/delivery";
@@ -19,6 +21,7 @@ const inboundAdapters = {
   whatsapp: whatsappInboundAdapter,
   email: emailInboundAdapter,
   sms: smsInboundAdapter,
+  telegram: telegramInboundAdapter,
 } as const;
 
 const deliveryAdapters = {
@@ -26,6 +29,7 @@ const deliveryAdapters = {
   whatsapp: whatsappDeliveryAdapter,
   email: emailDeliveryAdapter,
   sms: smsDeliveryAdapter,
+  telegram: telegramDeliveryAdapter,
 } as const;
 
 export class UnsupportedChannelError extends Error {
@@ -49,6 +53,9 @@ export function getInboundAdapter(channel: string): ChannelInboundAdapter {
   if (channel === "sms") {
     return inboundAdapters.sms;
   }
+  if (channel === "telegram") {
+    return inboundAdapters.telegram;
+  }
   throw new UnsupportedChannelError(channel);
 }
 
@@ -64,6 +71,9 @@ export function getDeliveryAdapter(channel: string): ChannelDeliveryAdapter {
   }
   if (channel === "sms") {
     return deliveryAdapters.sms;
+  }
+  if (channel === "telegram") {
+    return deliveryAdapters.telegram;
   }
   throw new UnsupportedChannelError(channel);
 }

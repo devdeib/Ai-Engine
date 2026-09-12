@@ -29,6 +29,7 @@
  *   20260830000001_channel_account_lifecycle_rls.sql
  *   20260830000002_channel_identity_attach.sql
  *   20260831000001_organization_sales_profiles.sql
+ *   20260909000001_telegram_channel.sql
  *
  * Re-generate (or update manually) whenever the schema changes.
  */
@@ -67,7 +68,7 @@ export type LeadActivityType =
   | "appointment"
   | "ai";
 
-export type ConversationChannel = "in_app" | "test" | "whatsapp" | "email" | "sms";
+export type ConversationChannel = "in_app" | "test" | "whatsapp" | "email" | "sms" | "telegram";
 
 export type ConversationStatus = "open" | "closed";
 
@@ -116,7 +117,7 @@ export type AiSalesRecommendationMappedTool =
   | "create_follow_up"
   | "create_appointment";
 
-export type ChannelKind = "test" | "whatsapp" | "email" | "sms";
+export type ChannelKind = "test" | "whatsapp" | "email" | "sms" | "telegram";
 
 export type ChannelAccountStatus = "active" | "paused" | "disabled";
 

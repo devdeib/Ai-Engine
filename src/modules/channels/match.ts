@@ -68,6 +68,9 @@ export function normalizeChannelAddress(
   if (channel === "email") {
     return externalAddress.trim().toLowerCase();
   }
+  if (channel === "telegram") {
+    return externalAddress.trim();
+  }
   if (channel === "whatsapp" || channel === "sms" || channel === "test") {
     return digitsOnly(externalAddress);
   }

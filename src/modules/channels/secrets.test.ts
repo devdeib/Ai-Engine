@@ -9,6 +9,7 @@ import {
   loadChannelAccountSecrets,
   loadEmailDeliveryCredentials,
   loadSmsDeliveryCredentials,
+  loadTelegramDeliveryCredentials,
   loadWhatsAppDeliveryCredentials,
 } from "@/modules/channels/secrets";
 
@@ -296,6 +297,91 @@ describe("channel secret loaders", () => {
 
     await expect(
       loadSmsDeliveryCredentials(ORG_A, ACCOUNT_ID)
+    ).resolves.toBeNull();
+  });
+
+  it("loads Telegram delivery credentials from the secret row only", async () => {
+    const telegramToken = "123456:AA" + "z".repeat(30);
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: ACCOUNT_ID,
+                      organization_id: ORG_A,
+                      channel: "telegram",
+                      status: "active",
+                      provider_destination_id: "vg_sales_bot",
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "channel_account_secrets") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      webhook_secret: "s".repeat(64),
+                      provider_access_token: telegramToken,
+                      webhook_verify_token: null,
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    await expect(
+      loadTelegramDeliveryCredentials(ORG_A, ACCOUNT_ID)
+    ).resolves.toEqual({
+      accessToken: telegramToken,
+    });
+  });
+
+  it("does not load Telegram credentials for a WhatsApp account", async () => {
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: ACCOUNT_ID,
+                      organization_id: ORG_A,
+                      channel: "whatsapp",
+                      status: "active",
+                      provider_destination_id: "123456789012345",
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    await expect(
+      loadTelegramDeliveryCredentials(ORG_A, ACCOUNT_ID)
     ).resolves.toBeNull();
   });
 });

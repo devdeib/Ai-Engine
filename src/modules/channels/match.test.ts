@@ -78,6 +78,10 @@ describe("normalizeChannelAddress", () => {
     );
   });
 
+  it("normalizes Telegram chat ids without treating them as phone numbers", () => {
+    expect(normalizeChannelAddress("telegram", " 1001234567 ")).toBe("1001234567");
+  });
+
   it("normalizes WhatsApp, SMS, and Test addresses to digits", () => {
     expect(normalizeChannelAddress("whatsapp", "+974 5555 1234")).toBe(
       "97455551234"
@@ -112,6 +116,9 @@ describe("leadMatchesNormalizedAddress", () => {
     );
     expect(leadMatchesNormalizedAddress("sms", normalized, phone)).toBe(true);
     expect(leadMatchesNormalizedAddress("test", normalized, phone)).toBe(true);
+    expect(
+      leadMatchesNormalizedAddress("telegram", "1001234567", phone)
+    ).toBe(false);
     expect(
       leadMatchesNormalizedAddress("whatsapp", normalized, {
         email: null,

@@ -4,7 +4,7 @@
  *
  * List/get are membership-gated. Create is owner/admin only.
  * Test webhook secret is returned exactly once on create.
- * WhatsApp/Email/SMS credentials are never returned.
+ * WhatsApp/Email/SMS/Telegram credentials are never returned.
  */
 import { type NextRequest, NextResponse } from "next/server";
 import { handleApiError, successResponse } from "@/lib/api/response";

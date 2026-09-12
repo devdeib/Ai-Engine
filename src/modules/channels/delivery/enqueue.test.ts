@@ -255,7 +255,7 @@ describe("enqueueChannelDelivery", () => {
     expect(scheduleChannelDeliveryProcessing).not.toHaveBeenCalled();
   });
 
-  it.each(["test", "whatsapp", "email", "sms"] as const)(
+  it.each(["test", "whatsapp", "email", "sms", "telegram"] as const)(
     "enqueues %s outbound conversations",
     async (channel) => {
       const { refInsert, jobInsert } = mockInserts({});
