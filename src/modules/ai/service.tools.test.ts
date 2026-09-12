@@ -73,6 +73,7 @@ import { processConversationMessage } from "@/modules/ai/service";
 import { MockAiProvider } from "@/modules/ai/providers/mock";
 import type { AiContext } from "@/modules/ai/types";
 import { EMPTY_AI_SALES_PROFILE } from "@/modules/ai/types";
+import { leadQualificationContextFields } from "@/modules/leads/qualification";
 import type { ConversationWithLead, Lead, LeadActivity, Message } from "@/lib/db/types";
 
 const ORG_A = "aaaaaaaa-0000-0000-0000-000000000001";
@@ -122,6 +123,7 @@ const aiContext: AiContext = {
     status: "new",
     score: null,
     notes: null,
+    ...leadQualificationContextFields({ email: null, phone: null }),
   },
   conversation: {
     channel: "in_app",
@@ -248,6 +250,7 @@ describe("processConversationMessage tool loop", () => {
       "get_lead_follow_ups",
       "create_follow_up",
       "create_appointment",
+      "record_customer_facts",
     ]);
     expect(JSON.stringify(first?.tools)).not.toContain("organizationId");
     const second = generateResponse.mock.calls[1]?.[0];

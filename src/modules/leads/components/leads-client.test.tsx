@@ -83,6 +83,8 @@ function makeLead(id: string, overrides: Partial<Lead> = {}): Lead {
     notes: null,
     created_at: "2026-08-19T00:00:00Z",
     updated_at: "2026-08-19T00:00:00Z",
+    qualification_facts: {},
+    qualification_updated_at: null,
     ...overrides,
   };
 }

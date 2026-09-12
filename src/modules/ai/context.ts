@@ -20,6 +20,7 @@ import {
 import { buildPipelineSnapshot } from "@/modules/ai/pipeline";
 import { mapAuthorTypeForAiContext } from "@/modules/ai/principal";
 import type { OrganizationSalesProfilePublic } from "@/modules/organizations/sales-profile-schema";
+import { buildLeadQualificationView } from "@/modules/leads/qualification";
 
 function toAiSalesProfile(
   profile: OrganizationSalesProfilePublic
@@ -86,6 +87,12 @@ export async function buildAiContext(input: {
     ),
   ]);
 
+  const qualification = buildLeadQualificationView({
+    email: lead.email,
+    phone: lead.phone,
+    qualificationFacts: lead.qualification_facts,
+  });
+
   return {
     organization: {
       name: organizationName,
@@ -100,6 +107,9 @@ export async function buildAiContext(input: {
       status: lead.status,
       score: lead.score,
       notes: lead.notes,
+      qualificationFacts: qualification.facts,
+      qualificationStatus: qualification.qualificationStatus,
+      missingRequiredFields: qualification.missingRequiredFields,
     },
     conversation: {
       channel: conversation.channel,

@@ -6,6 +6,7 @@ import {
 } from "@/modules/ai/analysis/prompt";
 import { AI_SALES_ANALYSIS_PROMPT_VERSION } from "@/modules/ai/analysis/constants";
 import { EMPTY_AI_SALES_PROFILE, type AiContext } from "@/modules/ai/types";
+import { leadQualificationContextFields } from "@/modules/leads/qualification";
 
 const context: AiContext = {
   organization: {
@@ -27,6 +28,10 @@ const context: AiContext = {
     status: "new",
     score: 40,
     notes: "Interested in downtown.",
+    ...leadQualificationContextFields({
+      email: "ahmed@example.com",
+      phone: null,
+    }),
   },
   conversation: {
     channel: "in_app",

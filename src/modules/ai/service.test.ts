@@ -67,6 +67,7 @@ import { MockAiProvider } from "@/modules/ai/providers/mock";
 import { AiMalformedResponseError, AiProviderError } from "@/modules/ai/errors";
 import type { AiContext, AiProviderResponse } from "@/modules/ai/types";
 import { EMPTY_AI_SALES_PROFILE } from "@/modules/ai/types";
+import { leadQualificationContextFields } from "@/modules/leads/qualification";
 import type { AiProvider } from "@/modules/ai/providers/types";
 import type { ConversationWithLead, LeadActivity, Message } from "@/lib/db/types";
 
@@ -117,6 +118,7 @@ const aiContext: AiContext = {
     status: "new",
     score: null,
     notes: null,
+    ...leadQualificationContextFields({ email: null, phone: null }),
   },
   conversation: {
     channel: "in_app",

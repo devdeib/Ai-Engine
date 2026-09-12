@@ -5,6 +5,7 @@ import { getLeadAppointmentsTool } from "@/modules/ai/tools/get-lead-appointment
 import { getLeadFollowUpsTool } from "@/modules/ai/tools/get-lead-follow-ups";
 import { createFollowUpTool } from "@/modules/ai/tools/create-follow-up";
 import { createAppointmentTool } from "@/modules/ai/tools/create-appointment";
+import { recordCustomerFactsTool } from "@/modules/ai/tools/record-customer-facts";
 import type { AiToolDefinition } from "@/modules/ai/tools/types";
 
 const tools = [
@@ -14,6 +15,7 @@ const tools = [
   getLeadFollowUpsTool,
   createFollowUpTool,
   createAppointmentTool,
+  recordCustomerFactsTool,
 ] as const satisfies readonly AiToolDefinition[];
 
 const toolByName = new Map<string, AiToolDefinition>(

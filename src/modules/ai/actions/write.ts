@@ -18,10 +18,12 @@ import type { AiToolContext } from "@/modules/ai/tools/types";
 import type {
   CreateAppointmentToolInput,
   CreateFollowUpToolInput,
+  RecordCustomerFactsToolInput,
 } from "@/modules/ai/tools/write-schemas";
 import {
   createAppointmentToolInputSchema,
 } from "@/modules/ai/tools/write-schemas";
+import { applyRecordedCustomerFacts } from "@/modules/leads/qualification-write";
 import { hashAiToolInput } from "@/modules/ai/actions/hash";
 import {
   effectiveAiToolActionStatus,
@@ -503,4 +505,122 @@ export async function rejectAiToolAction(
   });
 
   return data as AiToolAction;
+}
+
+function customerFactsPayload(
+  input: RecordCustomerFactsToolInput
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) {
+      payload[key] = value;
+    }
+  }
+  return payload;
+}
+
+function customerFactsSummary(
+  result: Awaited<ReturnType<typeof applyRecordedCustomerFacts>>
+): Record<string, unknown> {
+  return {
+    applied: result.applied,
+    skipped: result.skipped,
+    knownFacts: result.knownFacts,
+    firstName: result.firstName,
+    lastName: result.lastName,
+    email: result.email,
+    phone: result.phone,
+    companyName: result.companyName,
+    qualificationStatus: result.qualificationStatus,
+    missingRequiredFields: result.missingRequiredFields,
+  };
+}
+
+async function completeCustomerFacts(
+  ctx: AiToolContext,
+  action: AiToolAction,
+  input: RecordCustomerFactsToolInput
+): Promise<Record<string, unknown>> {
+  try {
+    const recorded = await applyRecordedCustomerFacts(
+      ctx.organizationId,
+      ctx.userId,
+      ctx.leadId,
+      input
+    );
+    const summary = customerFactsSummary(recorded);
+    await updateAction(ctx.organizationId, action.id, {
+      status: "executed",
+      executed_at: new Date().toISOString(),
+      result_resource_type: "lead",
+      result_resource_id: ctx.leadId,
+      result_summary: summary,
+      error_code: null,
+    });
+    logger.info("AI tool executed", {
+      organizationId: ctx.organizationId,
+      userId: ctx.userId,
+      tool: "record_customer_facts",
+      outcome: "ok",
+      actionId: action.id,
+    });
+    return summary;
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      await markFailed(ctx.organizationId, action.id, "VALIDATION_ERROR");
+      throw error;
+    }
+    if (error instanceof NotFoundError) {
+      await markFailed(ctx.organizationId, action.id, "NOT_FOUND");
+      throw error;
+    }
+    await markFailed(ctx.organizationId, action.id, "AI_TOOL_FAILED");
+    throw error;
+  }
+}
+
+export async function executeRecordCustomerFacts(
+  ctx: AiToolContext,
+  input: RecordCustomerFactsToolInput
+): Promise<Record<string, unknown>> {
+  const payload = customerFactsPayload(input);
+  const inputHash = hashAiToolInput(payload);
+
+  const inserted = await insertAction({
+    organization_id: ctx.organizationId,
+    conversation_id: ctx.conversationId,
+    lead_id: ctx.leadId,
+    inbound_message_id: ctx.inboundMessageId,
+    tool_name: "record_customer_facts",
+    trust: "autonomous",
+    status: "executing",
+    input_hash: inputHash,
+    payload,
+    requested_by_user_id: ctx.userId,
+    trigger_source: ctx.triggerSource,
+    channel_identity_id: ctx.channelIdentityId,
+  });
+
+  let action = inserted.action;
+  if (inserted.unique) {
+    action = await loadByHash({
+      organizationId: ctx.organizationId,
+      inboundMessageId: ctx.inboundMessageId,
+      toolName: "record_customer_facts",
+      inputHash,
+    });
+  }
+
+  if (!action) {
+    throw new Error("Failed to record AI tool action");
+  }
+
+  if (action.status === "executed" && action.result_summary) {
+    return action.result_summary;
+  }
+  if (action.status === "failed") {
+    throw new Error("Failed to record customer facts");
+  }
+
+  return completeCustomerFacts(ctx, action, input);
 }

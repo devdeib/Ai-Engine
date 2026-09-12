@@ -101,6 +101,8 @@ function makeLead(overrides: Partial<Lead> = {}): Lead {
     notes: null,
     created_at: "2026-08-19T00:00:00Z",
     updated_at: "2026-08-19T00:00:00Z",
+    qualification_facts: {},
+    qualification_updated_at: null,
     ...overrides,
   };
 }
@@ -216,6 +218,32 @@ describe("LeadDetailClient — data rendering", () => {
     render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
 
     expect(await screen.findByText("ahmed@example.com")).toBeInTheDocument();
+  });
+
+  it("renders derived qualification status and collected facts as read-only", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      makeLeadResponse(
+        makeLead({
+          qualification_facts: {
+            budget: "200k",
+            timeline: "3 months",
+            location: "Limassol",
+          },
+        })
+      ) as Response
+    );
+
+    render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
+
+    expect(await screen.findByText("Qualification")).toBeInTheDocument();
+    expect(screen.getAllByText("Qualified").length).toBeGreaterThan(0);
+    expect(screen.getByText("200k")).toBeInTheDocument();
+    expect(screen.getByText("3 months")).toBeInTheDocument();
+    expect(screen.getByText("Limassol")).toBeInTheDocument();
+    expect(screen.getByText("None")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /save qualification/i })
+    ).not.toBeInTheDocument();
   });
 
   it("renders safely when email is null", async () => {

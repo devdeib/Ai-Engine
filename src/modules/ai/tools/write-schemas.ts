@@ -9,6 +9,12 @@ import {
   APPOINTMENT_NOTES_MAX,
   appointmentTimestampSchema,
 } from "@/modules/appointments/schema";
+import {
+  QUALIFICATION_FACT_KEYS,
+  QUALIFICATION_FACT_VALUE_MAX,
+  QUALIFICATION_STATUSES,
+  MISSING_REQUIRED_FIELD_ORDER,
+} from "@/modules/leads/qualification";
 
 function normalizeEmptyToNull(
   value: string | null | undefined
@@ -109,6 +115,96 @@ export type CreateAppointmentToolInput = z.infer<
   typeof createAppointmentToolInputSchema
 >;
 
+const factValueSchema = z
+  .string()
+  .trim()
+  .min(1, "Fact value is required")
+  .max(
+    QUALIFICATION_FACT_VALUE_MAX,
+    `Fact value must be ${QUALIFICATION_FACT_VALUE_MAX} characters or fewer`
+  );
+
+export const recordCustomerFactsToolInputSchema = z
+  .object({
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .email("A valid email address is required")
+      .max(255, "Email must be 255 characters or fewer")
+      .optional(),
+    phone: z
+      .string()
+      .trim()
+      .min(1, "Phone is required")
+      .max(30, "Phone must be 30 characters or fewer")
+      .optional(),
+    company_name: z
+      .string()
+      .trim()
+      .min(1, "Company name is required")
+      .max(255, "Company name must be 255 characters or fewer")
+      .optional(),
+    first_name: z
+      .string()
+      .trim()
+      .min(1, "First name is required")
+      .max(100, "First name must be 100 characters or fewer")
+      .optional(),
+    last_name: z
+      .string()
+      .trim()
+      .min(1, "Last name is required")
+      .max(100, "Last name must be 100 characters or fewer")
+      .optional(),
+    budget: factValueSchema.optional(),
+    timeline: factValueSchema.optional(),
+    location: factValueSchema.optional(),
+    property_type: factValueSchema.optional(),
+    financing: factValueSchema.optional(),
+    decision_maker: factValueSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.email !== undefined ||
+      value.phone !== undefined ||
+      value.company_name !== undefined ||
+      value.first_name !== undefined ||
+      value.last_name !== undefined ||
+      QUALIFICATION_FACT_KEYS.some((key) => value[key] !== undefined),
+    { message: "At least one customer fact is required" }
+  );
+
+export const recordCustomerFactsToolOutputSchema = z
+  .object({
+    applied: z.array(z.string()),
+    skipped: z.array(
+      z
+        .object({
+          field: z.string(),
+          reason: z.enum(["already_set", "not_stub"]),
+        })
+        .strict()
+    ),
+    knownFacts: z.record(z.string(), z.string()),
+    firstName: z.string(),
+    lastName: z.string(),
+    email: z.string().nullable(),
+    phone: z.string().nullable(),
+    companyName: z.string().nullable(),
+    qualificationStatus: z.enum(QUALIFICATION_STATUSES),
+    missingRequiredFields: z.array(z.enum(MISSING_REQUIRED_FIELD_ORDER)),
+  })
+  .strict();
+
+export type RecordCustomerFactsToolInput = z.infer<
+  typeof recordCustomerFactsToolInputSchema
+>;
+export type RecordCustomerFactsToolOutput = z.infer<
+  typeof recordCustomerFactsToolOutputSchema
+>;
+
 export const CREATE_FOLLOW_UP_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {
@@ -129,5 +225,23 @@ export const CREATE_APPOINTMENT_JSON_SCHEMA: Record<string, unknown> = {
     notes: { type: ["string", "null"] },
   },
   required: ["startsAt"],
+  additionalProperties: false,
+};
+
+export const RECORD_CUSTOMER_FACTS_JSON_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    email: { type: "string" },
+    phone: { type: "string" },
+    company_name: { type: "string" },
+    first_name: { type: "string" },
+    last_name: { type: "string" },
+    budget: { type: "string" },
+    timeline: { type: "string" },
+    location: { type: "string" },
+    property_type: { type: "string" },
+    financing: { type: "string" },
+    decision_maker: { type: "string" },
+  },
   additionalProperties: false,
 };

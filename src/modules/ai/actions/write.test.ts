@@ -18,6 +18,9 @@ vi.mock("@/modules/follow-ups/actions", () => ({
 vi.mock("@/modules/appointments/actions", () => ({
   createAppointment: vi.fn(),
 }));
+vi.mock("@/modules/leads/qualification-write", () => ({
+  applyRecordedCustomerFacts: vi.fn(),
+}));
 vi.mock("@/modules/leads/activities/queries", () => ({
   recordLeadActivity: vi.fn(),
 }));
@@ -29,10 +32,12 @@ import { createClient } from "@/lib/supabase/server";
 import { requireOrgMembership } from "@/modules/organizations/queries";
 import { createLeadFollowUp } from "@/modules/follow-ups/actions";
 import { createAppointment } from "@/modules/appointments/actions";
+import { applyRecordedCustomerFacts } from "@/modules/leads/qualification-write";
 import { recordLeadActivity } from "@/modules/leads/activities/queries";
 import {
   approveAiToolAction,
   executeCreateFollowUp,
+  executeRecordCustomerFacts,
   rejectAiToolAction,
   requestCreateAppointment,
 } from "@/modules/ai/actions/write";
@@ -417,5 +422,81 @@ describe("approveAiToolAction / rejectAiToolAction", () => {
     await expect(approveAiToolAction(ORG_A, USER_2, ACTION_1)).rejects.toThrow(
       TenantAccessError
     );
+  });
+});
+
+describe("executeRecordCustomerFacts", () => {
+  const factsInput = { email: "ahmed@example.com", budget: "200k" };
+  const factsResult = {
+    applied: ["email", "budget"] as Array<"email" | "budget">,
+    skipped: [],
+    knownFacts: { budget: "200k" },
+    firstName: "Ahmed",
+    lastName: "Ali",
+    email: "ahmed@example.com",
+    phone: null,
+    companyName: null,
+    qualificationStatus: "qualifying" as const,
+    missingRequiredFields: ["timeline", "location"] as Array<
+      "timeline" | "location"
+    >,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(applyRecordedCustomerFacts).mockResolvedValue(factsResult);
+    installStore();
+  });
+
+  it("records facts autonomously and points the ledger at the lead", async () => {
+    const result = await executeRecordCustomerFacts(ctx, factsInput);
+    expect(applyRecordedCustomerFacts).toHaveBeenCalledWith(
+      ORG_A,
+      USER_1,
+      LEAD_1,
+      factsInput
+    );
+    expect(result).toEqual(factsResult);
+    expect(rows[0]?.tool_name).toBe("record_customer_facts");
+    expect(rows[0]?.trust).toBe("autonomous");
+    expect(rows[0]?.status).toBe("executed");
+    expect(rows[0]?.result_resource_type).toBe("lead");
+    expect(rows[0]?.result_resource_id).toBe(LEAD_1);
+    expect(JSON.stringify(result)).not.toContain(ACTION_1);
+  });
+
+  it("replays the stored result for the same inbound and args", async () => {
+    await executeRecordCustomerFacts(ctx, factsInput);
+    const second = await executeRecordCustomerFacts(ctx, factsInput);
+    expect(applyRecordedCustomerFacts).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(factsResult);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("merges sequential different hashes", async () => {
+    await executeRecordCustomerFacts(ctx, factsInput);
+    vi.mocked(applyRecordedCustomerFacts).mockResolvedValue({
+      ...factsResult,
+      applied: ["timeline"],
+      knownFacts: { budget: "200k", timeline: "3 months" },
+    });
+    await executeRecordCustomerFacts(ctx, { timeline: "3 months" });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.input_hash).not.toBe(rows[1]?.input_hash);
+    expect(applyRecordedCustomerFacts).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses channel userId null without assigning an operator", async () => {
+    await executeRecordCustomerFacts(
+      { ...ctx, userId: null, triggerSource: "channel_ingress" },
+      factsInput
+    );
+    expect(applyRecordedCustomerFacts).toHaveBeenCalledWith(
+      ORG_A,
+      null,
+      LEAD_1,
+      factsInput
+    );
+    expect(rows[0]?.requested_by_user_id).toBeNull();
   });
 });

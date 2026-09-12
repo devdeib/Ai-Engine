@@ -13,6 +13,7 @@ describe("AI tool registry", () => {
     expect(names).toEqual([...AI_TOOL_NAMES].sort());
     expect(names).toContain("create_follow_up");
     expect(names).toContain("create_appointment");
+    expect(names).toContain("record_customer_facts");
     expect(names).not.toContain("update_follow_up");
     expect(names).not.toContain("update_appointment");
     expect(names).not.toContain("update_lead");
@@ -24,6 +25,7 @@ describe("AI tool registry", () => {
   it("classifies write-tool trust correctly", () => {
     expect(getAiTool("create_follow_up")?.trust).toBe("autonomous");
     expect(getAiTool("create_appointment")?.trust).toBe("human_approval");
+    expect(getAiTool("record_customer_facts")?.trust).toBe("autonomous");
     expect(getAiTool("get_lead_context")?.trust).toBe("autonomous");
   });
 

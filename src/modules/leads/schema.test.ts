@@ -372,11 +372,13 @@ describe("Lead type structure (compile-time shape assertions)", () => {
       status: true,
       score: true,
       notes: true,
+      qualification_facts: true,
+      qualification_updated_at: true,
       created_at: true,
       updated_at: true,
     };
     // Every key in the shape must be defined.
-    expect(Object.keys(shape).length).toBe(14);
+    expect(Object.keys(shape).length).toBe(16);
   });
 });
 
