@@ -2,6 +2,11 @@
  * Internal AI domain types. Actor identity is never accepted from the client.
  */
 import type { AppointmentStatus, LeadFollowUpStatus, LeadStatus } from "@/lib/db/types";
+import type {
+  MissingRequiredField,
+  QualificationFacts,
+  QualificationStatus,
+} from "@/modules/leads/qualification";
 
 export type AiActor = "human" | "ai" | "system";
 
@@ -32,6 +37,9 @@ export interface AiLeadContext {
   status: LeadStatus;
   score: number | null;
   notes: string | null;
+  qualificationFacts: QualificationFacts;
+  qualificationStatus: QualificationStatus;
+  missingRequiredFields: MissingRequiredField[];
 }
 
 export interface AiConversationContext {
@@ -118,7 +126,7 @@ export const AI_CONTEXT_SIDE_LIMIT = 5;
 export const AI_DEFAULT_TIMEOUT_MS = 15_000;
 export const AI_DEFAULT_MAX_OUTPUT_TOKENS = 400;
 export const AI_MAX_TOOL_CALLS = 2;
-export const SALES_AGENT_PROMPT_VERSION = "SALES_AGENT_PROMPT_V2";
+export const SALES_AGENT_PROMPT_VERSION = "SALES_AGENT_PROMPT_V3";
 export const AI_TOOL_ACTION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export const AI_TOOL_NAMES = [
@@ -128,6 +136,7 @@ export const AI_TOOL_NAMES = [
   "get_lead_follow_ups",
   "create_follow_up",
   "create_appointment",
+  "record_customer_facts",
 ] as const;
 
 export type AiToolName = (typeof AI_TOOL_NAMES)[number];

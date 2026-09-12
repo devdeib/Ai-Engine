@@ -90,6 +90,8 @@ function stubHappyPath() {
     owner_id: USER_1,
     created_at: "2026-08-01T00:00:00Z",
     updated_at: "2026-08-01T00:00:00Z",
+    qualification_facts: {},
+    qualification_updated_at: null,
   });
   vi.mocked(listRecentConversationMessages).mockResolvedValue([
     {
@@ -186,6 +188,16 @@ describe("buildAiContext", () => {
     expect(context.lead.firstName).toBe("Ahmed");
     expect(context.lead.lastName).toBe("Ali");
     expect(context.lead.email).toBe("ahmed@example.com");
+    expect(context.lead.qualificationFacts).toEqual({});
+    expect(context.lead.qualificationStatus).toBe("not_started");
+    expect(context.lead.missingRequiredFields).toEqual([
+      "budget",
+      "timeline",
+      "location",
+    ]);
+    expect(context.pipeline).not.toHaveProperty("qualificationStatus");
+    expect(context.pipeline).not.toHaveProperty("qualificationFacts");
+    expect(context.pipeline).not.toHaveProperty("missingRequiredFields");
     expect(context.messages).toHaveLength(1);
     expect(context.messages[0]?.body).toBe("Hello");
     expect(context.followUps[0]?.title).toBe("Call back");
@@ -217,6 +229,8 @@ describe("buildAiContext", () => {
       owner_id: USER_1,
       created_at: "2026-08-01T00:00:00Z",
       updated_at: "2026-08-01T00:00:00Z",
+      qualification_facts: {},
+      qualification_updated_at: null,
     });
     const context = await buildAiContext({
       organizationId: ORG_A,

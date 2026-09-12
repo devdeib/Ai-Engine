@@ -5,6 +5,7 @@ import { AiSalesAnalysisError } from "@/modules/ai/analysis/errors";
 import { MESSAGE_BODY_MAX } from "@/modules/conversations/schema";
 import type { AiContext } from "@/modules/ai/types";
 import { EMPTY_AI_SALES_PROFILE } from "@/modules/ai/types";
+import { leadQualificationContextFields } from "@/modules/leads/qualification";
 
 const context: AiContext = {
   organization: { name: "Acme", salesProfile: EMPTY_AI_SALES_PROFILE },
@@ -17,6 +18,7 @@ const context: AiContext = {
     status: "new",
     score: null,
     notes: null,
+    ...leadQualificationContextFields({ email: null, phone: null }),
   },
   conversation: {
     channel: "in_app",

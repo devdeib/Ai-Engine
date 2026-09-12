@@ -30,6 +30,7 @@
  *   20260830000002_channel_identity_attach.sql
  *   20260831000001_organization_sales_profiles.sql
  *   20260909000001_telegram_channel.sql
+ *   20260912000001_lead_qualification_facts.sql
  *
  * Re-generate (or update manually) whenever the schema changes.
  */
@@ -96,9 +97,15 @@ export type AiToolActionStatus =
   | "expired"
   | "failed";
 
-export type AiToolActionToolName = "create_follow_up" | "create_appointment";
+export type AiToolActionToolName =
+  | "create_follow_up"
+  | "create_appointment"
+  | "record_customer_facts";
 
-export type AiToolActionResourceType = "lead_follow_up" | "appointment";
+export type AiToolActionResourceType =
+  | "lead_follow_up"
+  | "appointment"
+  | "lead";
 
 export type AiSalesAnalysisStatus = "recorded" | "failed";
 
@@ -272,6 +279,8 @@ export interface Database {
           status: LeadStatus;
           score: number | null;
           notes: string | null;
+          qualification_facts: Record<string, string>;
+          qualification_updated_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -288,6 +297,8 @@ export interface Database {
           status?: LeadStatus;
           score?: number | null;
           notes?: string | null;
+          qualification_facts?: Record<string, string>;
+          qualification_updated_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -304,6 +315,8 @@ export interface Database {
           status?: LeadStatus;
           score?: number | null;
           notes?: string | null;
+          qualification_facts?: Record<string, string>;
+          qualification_updated_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };

@@ -5,6 +5,7 @@ import {
   aiPausedContent,
   aiResumedContent,
   aiResponseGeneratedContent,
+  aiRecordedCustomerFactsContent,
   aiAppointmentApprovalRequestedContent,
   aiAppointmentRequestRejectedContent,
   aiAppointmentRequestExpiredContent,
@@ -57,6 +58,8 @@ describe("activity content helpers", () => {
 
   it("returns concise AI copy without prompts or message bodies", () => {
     expect(aiResponseGeneratedContent()).toBe("AI response generated");
+    expect(aiRecordedCustomerFactsContent()).toBe("AI recorded customer facts");
+    expect(aiRecordedCustomerFactsContent()).not.toMatch(/@|phone|\+/i);
     expect(aiPausedContent()).toBe("AI paused");
     expect(aiResumedContent()).toBe("AI resumed");
     expect(aiEscalatedContent()).toBe("Escalated to human");

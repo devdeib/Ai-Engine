@@ -16,6 +16,7 @@ vi.mock("@/modules/follow-ups/queries", () => ({
 }));
 vi.mock("@/modules/ai/actions/write", () => ({
   executeCreateFollowUp: vi.fn(),
+  executeRecordCustomerFacts: vi.fn(),
   requestCreateAppointment: vi.fn(),
   approveAiToolAction: vi.fn(),
   rejectAiToolAction: vi.fn(),
@@ -68,6 +69,8 @@ const lead = {
   status: "new",
   score: 10,
   notes: "VIP",
+  qualification_facts: {},
+  qualification_updated_at: null,
 } as Lead;
 
 describe("runAiToolCall", () => {
@@ -143,6 +146,9 @@ describe("runAiToolCall", () => {
         status: "new",
         score: 10,
         notes: "VIP",
+        qualificationFacts: {},
+        qualificationStatus: "not_started",
+        missingRequiredFields: ["budget", "timeline", "location"],
       },
     });
     if (result.ok) {

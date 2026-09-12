@@ -51,6 +51,8 @@ function makeMemberRow(overrides: Partial<Record<string, unknown>> = {}) {
     invited_by: null,
     created_at: "2026-08-19T00:00:00Z",
     updated_at: "2026-08-19T00:00:00Z",
+    qualification_facts: {},
+    qualification_updated_at: null,
     ...overrides,
   };
 }
@@ -71,6 +73,8 @@ function makeLeadRow(overrides: Partial<Record<string, unknown>> = {}) {
     notes: null,
     created_at: "2026-08-19T00:00:00Z",
     updated_at: "2026-08-19T00:00:00Z",
+    qualification_facts: {},
+    qualification_updated_at: null,
     ...overrides,
   };
 }

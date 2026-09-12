@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   createAppointmentToolInputSchema,
   createFollowUpToolInputSchema,
+  recordCustomerFactsToolInputSchema,
 } from "@/modules/ai/tools/write-schemas";
 
 const FORGED = {
@@ -80,6 +81,52 @@ describe("createAppointmentToolInputSchema", () => {
     expect(
       createAppointmentToolInputSchema.safeParse({
         startsAt: "2026-08-22T10:00:00Z",
+        ...FORGED,
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe("recordCustomerFactsToolInputSchema", () => {
+  it("accepts a partial allowlisted patch", () => {
+    const parsed = recordCustomerFactsToolInputSchema.safeParse({
+      email: "  Ahmed@Example.com ",
+      budget: "  200k ",
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.email).toBe("ahmed@example.com");
+      expect(parsed.data.budget).toBe("200k");
+    }
+  });
+
+  it("rejects empty patches, unknown keys, and invalid email", () => {
+    expect(recordCustomerFactsToolInputSchema.safeParse({}).success).toBe(false);
+    expect(
+      recordCustomerFactsToolInputSchema.safeParse({ extra: true }).success
+    ).toBe(false);
+    expect(
+      recordCustomerFactsToolInputSchema.safeParse({ requirement: "villa" })
+        .success
+    ).toBe(false);
+    expect(
+      recordCustomerFactsToolInputSchema.safeParse({ email: "not-an-email" })
+        .success
+    ).toBe(false);
+    expect(
+      recordCustomerFactsToolInputSchema.safeParse({ budget: "" }).success
+    ).toBe(false);
+    expect(
+      recordCustomerFactsToolInputSchema.safeParse({
+        budget: "x".repeat(201),
+      }).success
+    ).toBe(false);
+  });
+
+  it("rejects identity fields", () => {
+    expect(
+      recordCustomerFactsToolInputSchema.safeParse({
+        budget: "200k",
         ...FORGED,
       }).success
     ).toBe(false);

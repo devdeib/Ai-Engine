@@ -24,6 +24,13 @@ import {
   LEAD_STATUS_LABELS,
   LEAD_STATUS_CLASSES,
 } from "@/modules/leads/lib/lead-labels";
+import {
+  QUALIFICATION_FACT_KEYS,
+  QUALIFICATION_FACT_LABELS,
+  QUALIFICATION_STATUS_LABELS,
+  MISSING_REQUIRED_FIELD_LABELS,
+  buildLeadQualificationView,
+} from "@/modules/leads/qualification";
 import { EditLeadForm } from "@/modules/leads/components/edit-lead-form";
 import type { OrgMemberOption } from "@/modules/leads/components/lead-table";
 import { ActivityTimeline } from "@/modules/leads/activities/components/activity-timeline";
@@ -85,6 +92,66 @@ function LeadDetailSkeleton() {
 // ---------------------------------------------------------------------------
 // Detail field helper
 // ---------------------------------------------------------------------------
+
+function LeadQualificationSection({
+  email,
+  phone,
+  qualificationFacts,
+}: {
+  email: string | null;
+  phone: string | null;
+  qualificationFacts: Record<string, string> | null | undefined;
+}) {
+  const qualification = buildLeadQualificationView({
+    email,
+    phone,
+    qualificationFacts,
+  });
+  const collected = QUALIFICATION_FACT_KEYS.filter(
+    (key) => qualification.facts[key]
+  );
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          Qualification
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2.5">
+        <DetailField
+          label="Status"
+          value={QUALIFICATION_STATUS_LABELS[qualification.qualificationStatus]}
+        />
+        {collected.length === 0 ? (
+          <DetailField
+            label="Facts"
+            value={null}
+            nullPlaceholder="None collected"
+          />
+        ) : (
+          collected.map((key) => (
+            <DetailField
+              key={key}
+              label={QUALIFICATION_FACT_LABELS[key]}
+              value={qualification.facts[key] ?? null}
+            />
+          ))
+        )}
+        <DetailField
+          label="Missing"
+          value={
+            qualification.missingRequiredFields.length === 0
+              ? "None"
+              : qualification.missingRequiredFields
+                  .map((field) => MISSING_REQUIRED_FIELD_LABELS[field])
+                  .join(", ")
+          }
+        />
+      </CardContent>
+    </Card>
+  );
+}
 
 function DetailField({
   label,
@@ -433,6 +500,12 @@ export function LeadDetailClient({
               </CardContent>
             </Card>
           </div>
+
+          <LeadQualificationSection
+            email={lead.email}
+            phone={lead.phone}
+            qualificationFacts={lead.qualification_facts}
+          />
 
           {/* Notes card — only shown when notes are present */}
           {lead.notes && (

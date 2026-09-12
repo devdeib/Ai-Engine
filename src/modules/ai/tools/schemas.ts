@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { EMPTY_TOOL_JSON_SCHEMA, type AiToolDefinition } from "@/modules/ai/tools/types";
+import {
+  MISSING_REQUIRED_FIELD_ORDER,
+  QUALIFICATION_STATUSES,
+} from "@/modules/leads/qualification";
 
 export const emptyAiToolInputSchema = z.object({}).strict();
 
@@ -20,6 +24,9 @@ export const leadContextToolOutputSchema = z
     ]),
     score: z.number().nullable(),
     notes: z.string().nullable(),
+    qualificationFacts: z.record(z.string(), z.string()),
+    qualificationStatus: z.enum(QUALIFICATION_STATUSES),
+    missingRequiredFields: z.array(z.enum(MISSING_REQUIRED_FIELD_ORDER)),
   })
   .strict();
 

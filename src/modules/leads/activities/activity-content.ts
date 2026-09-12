@@ -40,6 +40,10 @@ export function aiResponseGeneratedContent(): string {
   return "AI response generated";
 }
 
+export function aiRecordedCustomerFactsContent(): string {
+  return "AI recorded customer facts";
+}
+
 export function aiPausedContent(): string {
   return "AI paused";
 }

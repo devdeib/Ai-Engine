@@ -4,6 +4,7 @@ import type { AiToolActionStatus, AiToolActionToolName } from "@/lib/db/types";
 export const AI_WRITE_TOOL_NAMES = [
   "create_follow_up",
   "create_appointment",
+  "record_customer_facts",
 ] as const satisfies readonly [AiToolActionToolName, ...AiToolActionToolName[]];
 
 export const rejectAiToolActionSchema = z

@@ -2,6 +2,7 @@ import "server-only";
 import { getLead } from "@/modules/leads/queries";
 import { asEmptyInputTool, leadContextToolOutputSchema } from "@/modules/ai/tools/schemas";
 import type { AiToolDefinition } from "@/modules/ai/tools/types";
+import { buildLeadQualificationView } from "@/modules/leads/qualification";
 
 export const getLeadContextTool: AiToolDefinition = asEmptyInputTool({
   name: "get_lead_context",
@@ -10,6 +11,11 @@ export const getLeadContextTool: AiToolDefinition = asEmptyInputTool({
   outputSchema: leadContextToolOutputSchema,
   async execute(ctx) {
     const lead = await getLead(ctx.leadId, ctx.organizationId, ctx.userId);
+    const qualification = buildLeadQualificationView({
+      email: lead.email,
+      phone: lead.phone,
+      qualificationFacts: lead.qualification_facts,
+    });
     return {
       firstName: lead.first_name,
       lastName: lead.last_name,
@@ -19,6 +25,9 @@ export const getLeadContextTool: AiToolDefinition = asEmptyInputTool({
       status: lead.status,
       score: lead.score,
       notes: lead.notes,
+      qualificationFacts: qualification.facts,
+      qualificationStatus: qualification.qualificationStatus,
+      missingRequiredFields: qualification.missingRequiredFields,
     };
   },
 });
