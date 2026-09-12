@@ -349,7 +349,160 @@ describe("channel secret loaders", () => {
     await expect(
       loadTelegramDeliveryCredentials(ORG_A, ACCOUNT_ID)
     ).resolves.toEqual({
+      ok: true,
       accessToken: telegramToken,
+    });
+  });
+
+  it("loads Telegram delivery credentials without requiring webhook_secret", async () => {
+    const telegramToken = "123456:AA" + "z".repeat(30);
+    const secretSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: {
+              provider_access_token: telegramToken,
+            },
+            error: null,
+          }),
+        }),
+      }),
+    });
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: ACCOUNT_ID,
+                      organization_id: ORG_A,
+                      channel: "telegram",
+                      status: "active",
+                      provider_destination_id: "vg_sales_bot",
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "channel_account_secrets") {
+          return { select: secretSelect };
+        }
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    await expect(
+      loadTelegramDeliveryCredentials(ORG_A, ACCOUNT_ID)
+    ).resolves.toEqual({
+      ok: true,
+      accessToken: telegramToken,
+    });
+    expect(secretSelect).toHaveBeenCalledWith("provider_access_token");
+  });
+
+  it("does not treat a Telegram secrets query error as a missing token", async () => {
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: ACCOUNT_ID,
+                      organization_id: ORG_A,
+                      channel: "telegram",
+                      status: "active",
+                      provider_destination_id: "vg_sales_bot",
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "channel_account_secrets") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: null,
+                    error: { code: "PGRST301", message: "timeout" },
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    await expect(
+      loadTelegramDeliveryCredentials(ORG_A, ACCOUNT_ID)
+    ).resolves.toEqual({
+      ok: false,
+      errorCode: "CREDENTIALS_QUERY_FAILED",
+      retryable: true,
+    });
+  });
+
+  it("reports a missing Telegram provider token without calling it unavailable row", async () => {
+    vi.mocked(createClient).mockResolvedValue({
+      from: vi.fn().mockImplementation((table: string) => {
+        if (table === "channel_accounts") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: ACCOUNT_ID,
+                      organization_id: ORG_A,
+                      channel: "telegram",
+                      status: "active",
+                      provider_destination_id: "vg_sales_bot",
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        if (table === "channel_account_secrets") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { provider_access_token: null },
+                    error: null,
+                  }),
+                }),
+              }),
+            }),
+          };
+        }
+        return {};
+      }),
+    } as unknown as Awaited<ReturnType<typeof createClient>>);
+
+    await expect(
+      loadTelegramDeliveryCredentials(ORG_A, ACCOUNT_ID)
+    ).resolves.toEqual({
+      ok: false,
+      errorCode: "PROVIDER_TOKEN_MISSING",
+      retryable: false,
     });
   });
 
@@ -382,6 +535,10 @@ describe("channel secret loaders", () => {
 
     await expect(
       loadTelegramDeliveryCredentials(ORG_A, ACCOUNT_ID)
-    ).resolves.toBeNull();
+    ).resolves.toEqual({
+      ok: false,
+      errorCode: "CREDENTIALS_UNAVAILABLE",
+      retryable: false,
+    });
   });
 });

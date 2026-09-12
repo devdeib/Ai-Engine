@@ -4,6 +4,7 @@
  * Does not query CRM tables. Callers must never log returned values.
  */
 import "server-only";
+import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
 export interface ChannelAccountSecretMaterial {
@@ -30,6 +31,17 @@ export interface SmsDeliveryCredentials {
 export interface TelegramDeliveryCredentials {
   accessToken: string;
 }
+
+export type TelegramDeliveryCredentialLoad =
+  | { ok: true; accessToken: string }
+  | {
+      ok: false;
+      errorCode:
+        | "CREDENTIALS_QUERY_FAILED"
+        | "CREDENTIALS_UNAVAILABLE"
+        | "PROVIDER_TOKEN_MISSING";
+      retryable: boolean;
+    };
 
 export async function loadChannelAccountSecrets(
   organizationId: string,
@@ -182,7 +194,7 @@ export async function loadSmsDeliveryCredentials(
 export async function loadTelegramDeliveryCredentials(
   organizationId: string,
   channelAccountId: string
-): Promise<TelegramDeliveryCredentials | null> {
+): Promise<TelegramDeliveryCredentialLoad> {
   const supabase = await createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const accountResult = await (supabase.from("channel_accounts") as any)
@@ -191,6 +203,18 @@ export async function loadTelegramDeliveryCredentials(
     .eq("organization_id", organizationId)
     .maybeSingle();
 
+  if (accountResult.error) {
+    logger.warn("Telegram delivery credentials query failed", {
+      organizationId,
+      code: "CREDENTIALS_QUERY_FAILED",
+    });
+    return {
+      ok: false,
+      errorCode: "CREDENTIALS_QUERY_FAILED",
+      retryable: true,
+    };
+  }
+
   const account = accountResult.data as {
     channel?: string;
     status?: string;
@@ -198,21 +222,58 @@ export async function loadTelegramDeliveryCredentials(
   } | null;
 
   if (
-    accountResult.error ||
     !account ||
     account.channel !== "telegram" ||
     account.status !== "active" ||
     !account.provider_destination_id
   ) {
-    return null;
+    return {
+      ok: false,
+      errorCode: "CREDENTIALS_UNAVAILABLE",
+      retryable: false,
+    };
   }
 
-  const secrets = await loadChannelAccountSecrets(organizationId, channelAccountId);
-  if (!secrets?.providerAccessToken) {
-    return null;
+  // Outbound send only needs the Bot API token. webhook_secret is inbound-only
+  // and must not gate delivery.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const secretResult = await (supabase.from("channel_account_secrets") as any)
+    .select("provider_access_token")
+    .eq("channel_account_id", channelAccountId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (secretResult.error) {
+    logger.warn("Telegram delivery credentials query failed", {
+      organizationId,
+      code: "CREDENTIALS_QUERY_FAILED",
+    });
+    return {
+      ok: false,
+      errorCode: "CREDENTIALS_QUERY_FAILED",
+      retryable: true,
+    };
   }
 
-  return {
-    accessToken: secrets.providerAccessToken,
-  };
+  if (!secretResult.data) {
+    return {
+      ok: false,
+      errorCode: "CREDENTIALS_UNAVAILABLE",
+      retryable: false,
+    };
+  }
+
+  const accessToken =
+    typeof secretResult.data.provider_access_token === "string"
+      ? secretResult.data.provider_access_token
+      : "";
+  if (!accessToken) {
+    return {
+      ok: false,
+      errorCode: "PROVIDER_TOKEN_MISSING",
+      retryable: false,
+    };
+  }
+
+  return { ok: true, accessToken };
 }

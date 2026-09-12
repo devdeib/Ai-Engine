@@ -461,6 +461,10 @@ describe("processDueAiJobs", () => {
     await processDueAiJobs({ useAdminClient: true });
     expect(createAdminClient).toHaveBeenCalledTimes(1);
     expect(runWithSupabaseClientOverride).toHaveBeenCalledTimes(1);
+    expect(claimAiExecutionJobs).toHaveBeenLastCalledWith({
+      limit: 5,
+      organizationId: null,
+    });
   });
 
   it("dispatches channel_ingress jobs without a user principal", async () => {

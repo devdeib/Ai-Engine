@@ -14,6 +14,8 @@ export const canonicalInboundSchema = z
     from: z.string().trim().min(1, "from is required").max(128),
     to: z.string().trim().min(1, "to is required").max(128),
     body: z.string().trim().min(1, "body is required").max(4000),
+    senderFirstName: z.string().trim().min(1).max(100).optional(),
+    senderLastName: z.string().trim().min(1).max(100).optional(),
     occurredAt: z
       .string()
       .trim()

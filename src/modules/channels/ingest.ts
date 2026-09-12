@@ -23,6 +23,7 @@ import {
   CHANNEL_WEBHOOK_TIMESTAMP_HEADER,
 } from "@/modules/channels/constants";
 import { normalizeExternalAddress } from "@/modules/channels/hmac";
+import { isChannelStubLead } from "@/modules/channels/match";
 import type {
   ChannelAccount,
   ChannelIdentity,
@@ -96,6 +97,8 @@ export async function ingestChannelWebhook(input: {
       organizationId: account.organization_id,
       channelAccountId: account.id,
       externalAddress: from,
+      senderFirstName: parsed.event.senderFirstName,
+      senderLastName: parsed.event.senderLastName,
     });
 
     const conversation = await openExternalConversation({
@@ -230,6 +233,8 @@ async function upsertChannelIdentity(input: {
   organizationId: string;
   channelAccountId: string;
   externalAddress: string;
+  senderFirstName?: string;
+  senderLastName?: string;
 }): Promise<{ id: string; leadId: string }> {
   const supabase = await createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -242,9 +247,18 @@ async function upsertChannelIdentity(input: {
   if (existing.data) {
     const row = existing.data as ChannelIdentity;
     if (row.lead_id) {
+      await applySenderNameToStubLead({
+        organizationId: input.organizationId,
+        leadId: row.lead_id,
+        senderFirstName: input.senderFirstName,
+        senderLastName: input.senderLastName,
+      });
       return { id: row.id, leadId: row.lead_id };
     }
-    const lead = await createStubLead(input.organizationId);
+    const lead = await createStubLead(input.organizationId, {
+      firstName: input.senderFirstName,
+      lastName: input.senderLastName,
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const updated = await (supabase.from("channel_identities") as any)
       .update({ lead_id: lead.id })
@@ -258,7 +272,10 @@ async function upsertChannelIdentity(input: {
     return { id: row.id, leadId: lead.id };
   }
 
-  const lead = await createStubLead(input.organizationId);
+  const lead = await createStubLead(input.organizationId, {
+    firstName: input.senderFirstName,
+    lastName: input.senderLastName,
+  });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const inserted = await (supabase.from("channel_identities") as any)
     .insert({
@@ -295,14 +312,55 @@ async function upsertChannelIdentity(input: {
   return { id: created.id, leadId: created.lead_id };
 }
 
-async function createStubLead(organizationId: string): Promise<Lead> {
+async function applySenderNameToStubLead(input: {
+  organizationId: string;
+  leadId: string;
+  senderFirstName?: string;
+  senderLastName?: string;
+}): Promise<void> {
+  if (!input.senderFirstName || !input.senderLastName) {
+    return;
+  }
+  const supabase = await createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase.from("leads") as any)
+    .select("id, first_name, last_name, email, phone")
+    .eq("id", input.leadId)
+    .eq("organization_id", input.organizationId)
+    .maybeSingle();
+
+  if (error || !data || !isChannelStubLead(data)) {
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updated = await (supabase.from("leads") as any)
+    .update({
+      first_name: input.senderFirstName,
+      last_name: input.senderLastName,
+    })
+    .eq("id", input.leadId)
+    .eq("organization_id", input.organizationId);
+
+  if (updated.error) {
+    logger.error("Failed to apply sender name to stub lead", {
+      organizationId: input.organizationId,
+      code: updated.error.code ?? "INTERNAL_ERROR",
+    });
+  }
+}
+
+async function createStubLead(
+  organizationId: string,
+  sender?: { firstName?: string; lastName?: string }
+): Promise<Lead> {
   const supabase = await createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from("leads") as any)
     .insert({
       organization_id: organizationId,
-      first_name: CHANNEL_STUB_LEAD_FIRST_NAME,
-      last_name: CHANNEL_STUB_LEAD_LAST_NAME,
+      first_name: sender?.firstName || CHANNEL_STUB_LEAD_FIRST_NAME,
+      last_name: sender?.lastName || CHANNEL_STUB_LEAD_LAST_NAME,
       source: "other",
       status: "new",
     })

@@ -1,4 +1,5 @@
 import { ValidationError } from "@/lib/errors";
+import { CHANNEL_STUB_LEAD_LAST_NAME } from "@/modules/channels/constants";
 import { canonicalInboundSchema } from "@/modules/channels/schema";
 import type { ChannelInboundAdapterResult } from "@/modules/channels/adapters/types";
 
@@ -22,6 +23,38 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return value as Record<string, unknown>;
+}
+
+function readNamePart(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim().slice(0, 100);
+}
+
+/**
+ * Map Telegram private-chat sender fields onto lead first/last names.
+ * Matching still uses chat id. Returns null when Telegram provided no name.
+ */
+export function telegramSenderLeadName(
+  from: Record<string, unknown> | null
+): { firstName: string; lastName: string } | null {
+  if (!from) {
+    return null;
+  }
+  const firstName = readNamePart(from.first_name);
+  const lastName = readNamePart(from.last_name);
+  const username = readNamePart(from.username);
+  if (firstName && lastName) {
+    return { firstName, lastName };
+  }
+  if (firstName) {
+    return { firstName, lastName: CHANNEL_STUB_LEAD_LAST_NAME };
+  }
+  if (username) {
+    return { firstName: username, lastName: CHANNEL_STUB_LEAD_LAST_NAME };
+  }
+  return null;
 }
 
 function readId(value: unknown): string {
@@ -81,12 +114,20 @@ export function parseTelegramInbound(
     throw new ValidationError("Invalid webhook payload");
   }
 
+  const fromUser = asRecord(message.from) ?? chat;
+  const senderName = telegramSenderLeadName(fromUser);
   const parsed = canonicalInboundSchema.safeParse({
     providerMessageId: updateId,
     from,
     to,
     body,
     occurredAt: occurredAtFromUnixSeconds(message.date),
+    ...(senderName
+      ? {
+          senderFirstName: senderName.firstName,
+          senderLastName: senderName.lastName,
+        }
+      : {}),
   });
 
   if (!parsed.success) {

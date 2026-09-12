@@ -57,13 +57,21 @@ const account: ChannelAccount = {
   updated_at: "2026-09-09T00:00:00Z",
 };
 
-function textBody(overrides: { updateId?: number; chatId?: number; text?: string } = {}) {
+function textBody(
+  overrides: {
+    updateId?: number;
+    chatId?: number;
+    text?: string;
+    from?: Record<string, unknown>;
+  } = {}
+) {
   return JSON.stringify({
     update_id: overrides.updateId ?? 9001,
     message: {
       message_id: 12,
       date: 1710000000,
       chat: { id: overrides.chatId ?? Number(CHAT_ID), type: "private" },
+      ...(overrides.from ? { from: overrides.from } : {}),
       text: overrides.text ?? "Is the unit available?",
     },
   });
@@ -228,6 +236,26 @@ function installStore(store: Store) {
               }),
             }),
           })),
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: store.leads[0] ?? null,
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+          update: vi.fn().mockImplementation((patch: Record<string, unknown>) => {
+            if (store.leads[0]) {
+              Object.assign(store.leads[0], patch);
+            }
+            return {
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockResolvedValue({ error: null }),
+              }),
+            };
+          }),
         };
       }
       if (table === "conversations") {
@@ -431,6 +459,177 @@ describe("Telegram ingest contract", () => {
     });
     expect(store.identities).toHaveLength(1);
     expect(store.conversations).toHaveLength(1);
+  });
+
+  it("creates a stub lead from Telegram first and last name", async () => {
+    const store = emptyStore();
+    installStore(store);
+    await ingestChannelWebhook({
+      channelAccountId: ACCOUNT_ID,
+      rawBody: textBody({
+        from: { id: Number(CHAT_ID), first_name: "Ahmed", last_name: "Ali" },
+      }),
+      headers: secretHeaders(),
+    });
+    expect(store.leads[0]).toEqual(
+      expect.objectContaining({
+        first_name: "Ahmed",
+        last_name: "Ali",
+      })
+    );
+    expect(store.identities[0]).toEqual(
+      expect.objectContaining({ external_address: CHAT_ID })
+    );
+  });
+
+  it("creates a stub lead from Telegram first name only", async () => {
+    const store = emptyStore();
+    installStore(store);
+    await ingestChannelWebhook({
+      channelAccountId: ACCOUNT_ID,
+      rawBody: textBody({
+        from: { id: Number(CHAT_ID), first_name: "Sara" },
+      }),
+      headers: secretHeaders(),
+    });
+    expect(store.leads[0]).toEqual(
+      expect.objectContaining({
+        first_name: "Sara",
+        last_name: "Customer",
+      })
+    );
+  });
+
+  it("falls back to Telegram username for the stub lead first name", async () => {
+    const store = emptyStore();
+    installStore(store);
+    await ingestChannelWebhook({
+      channelAccountId: ACCOUNT_ID,
+      rawBody: textBody({
+        from: { id: Number(CHAT_ID), username: "sara_q" },
+      }),
+      headers: secretHeaders(),
+    });
+    expect(store.leads[0]).toEqual(
+      expect.objectContaining({
+        first_name: "sara_q",
+        last_name: "Customer",
+      })
+    );
+  });
+
+  it("keeps Unknown Customer when Telegram provides no usable name", async () => {
+    const store = emptyStore();
+    installStore(store);
+    await ingestChannelWebhook({
+      channelAccountId: ACCOUNT_ID,
+      rawBody: textBody(),
+      headers: secretHeaders(),
+    });
+    expect(store.leads[0]).toEqual(
+      expect.objectContaining({
+        first_name: "Unknown",
+        last_name: "Customer",
+      })
+    );
+  });
+
+  it("updates an existing stub lead name without creating a second identity", async () => {
+    const store = emptyStore();
+    store.identities = [
+      {
+        id: IDENTITY_ID,
+        organization_id: ORG_A,
+        channel_account_id: ACCOUNT_ID,
+        external_address: CHAT_ID,
+        lead_id: LEAD_ID,
+      },
+    ];
+    store.leads = [
+      {
+        id: LEAD_ID,
+        organization_id: ORG_A,
+        first_name: "Unknown",
+        last_name: "Customer",
+        email: null,
+        phone: null,
+      },
+    ];
+    store.conversations = [
+      {
+        id: CONV_1,
+        organization_id: ORG_A,
+        lead_id: LEAD_ID,
+        channel_identity_id: IDENTITY_ID,
+        channel_account_id: ACCOUNT_ID,
+        status: "open",
+        channel: "telegram",
+      },
+    ];
+    installStore(store);
+    await ingestChannelWebhook({
+      channelAccountId: ACCOUNT_ID,
+      rawBody: textBody({
+        from: { id: Number(CHAT_ID), first_name: "Ahmed", last_name: "Ali" },
+      }),
+      headers: secretHeaders(),
+    });
+    expect(store.identities).toHaveLength(1);
+    expect(store.leads).toHaveLength(1);
+    expect(store.leads[0]).toEqual(
+      expect.objectContaining({
+        first_name: "Ahmed",
+        last_name: "Ali",
+      })
+    );
+  });
+
+  it("does not overwrite a matched CRM lead name", async () => {
+    const store = emptyStore();
+    store.identities = [
+      {
+        id: IDENTITY_ID,
+        organization_id: ORG_A,
+        channel_account_id: ACCOUNT_ID,
+        external_address: CHAT_ID,
+        lead_id: LEAD_ID,
+      },
+    ];
+    store.leads = [
+      {
+        id: LEAD_ID,
+        organization_id: ORG_A,
+        first_name: "Noura",
+        last_name: "Hassan",
+        email: "noura@example.com",
+        phone: null,
+      },
+    ];
+    store.conversations = [
+      {
+        id: CONV_1,
+        organization_id: ORG_A,
+        lead_id: LEAD_ID,
+        channel_identity_id: IDENTITY_ID,
+        channel_account_id: ACCOUNT_ID,
+        status: "open",
+        channel: "telegram",
+      },
+    ];
+    installStore(store);
+    await ingestChannelWebhook({
+      channelAccountId: ACCOUNT_ID,
+      rawBody: textBody({
+        from: { id: Number(CHAT_ID), first_name: "Ahmed", last_name: "Ali" },
+      }),
+      headers: secretHeaders(),
+    });
+    expect(store.leads[0]).toEqual(
+      expect.objectContaining({
+        first_name: "Noura",
+        last_name: "Hassan",
+      })
+    );
   });
 
   it("rejects a missing or invalid secret token", async () => {

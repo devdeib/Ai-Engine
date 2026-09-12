@@ -38,6 +38,7 @@ describe("telegramDeliveryAdapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loadCredentials.mockResolvedValue({
+      ok: true,
       accessToken: BOT_TOKEN,
     });
   });
@@ -182,7 +183,11 @@ describe("telegramDeliveryAdapter", () => {
   });
 
   it("fails closed with CREDENTIALS_UNAVAILABLE when credentials cannot be loaded", async () => {
-    loadCredentials.mockResolvedValueOnce(null);
+    loadCredentials.mockResolvedValueOnce({
+      ok: false,
+      errorCode: "CREDENTIALS_UNAVAILABLE",
+      retryable: false,
+    });
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
       errorCode: "CREDENTIALS_UNAVAILABLE",
@@ -196,5 +201,33 @@ describe("telegramDeliveryAdapter", () => {
     expect(loggedOutput()).not.toContain(BOT_TOKEN);
     expect(loggedOutput()).not.toContain(CHAT_ID);
     expect(loggedOutput()).not.toContain(BODY);
+  });
+
+  it("does not call Telegram when the provider token is missing", async () => {
+    loadCredentials.mockResolvedValueOnce({
+      ok: false,
+      errorCode: "PROVIDER_TOKEN_MISSING",
+      retryable: false,
+    });
+    await expect(adapter.send(sendInput())).resolves.toEqual({
+      ok: false,
+      errorCode: "PROVIDER_TOKEN_MISSING",
+      retryable: false,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("retries when credential loading hits a database query failure", async () => {
+    loadCredentials.mockResolvedValueOnce({
+      ok: false,
+      errorCode: "CREDENTIALS_QUERY_FAILED",
+      retryable: true,
+    });
+    await expect(adapter.send(sendInput())).resolves.toEqual({
+      ok: false,
+      errorCode: "CREDENTIALS_QUERY_FAILED",
+      retryable: true,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

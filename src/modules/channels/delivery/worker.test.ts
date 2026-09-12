@@ -417,4 +417,14 @@ describe("processDueChannelDeliveryJobs", () => {
     );
     expect(processConversationMessage).not.toHaveBeenCalled();
   });
+
+  it("claims a batch of due jobs on admin drain without shrinking the limit", async () => {
+    mockDeliveryScope();
+    vi.mocked(claimChannelDeliveryJobs).mockResolvedValue([]);
+    await processDueChannelDeliveryJobs({ useAdminClient: true });
+    expect(claimChannelDeliveryJobs).toHaveBeenCalledWith({
+      limit: 5,
+      organizationId: null,
+    });
+  });
 });

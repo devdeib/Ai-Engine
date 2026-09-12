@@ -7,8 +7,12 @@ import { NextRequest } from "next/server";
 vi.mock("@/modules/ai/jobs/worker", () => ({
   processDueAiJobs: vi.fn(),
 }));
+vi.mock("@/modules/channels/delivery/worker", () => ({
+  processDueChannelDeliveryJobs: vi.fn(),
+}));
 
 import { processDueAiJobs } from "@/modules/ai/jobs/worker";
+import { processDueChannelDeliveryJobs } from "@/modules/channels/delivery/worker";
 import { GET, POST } from "./route";
 
 const PATH = "/api/v1/internal/ai-jobs/drain";
@@ -26,6 +30,7 @@ describe("/api/v1/internal/ai-jobs/drain", () => {
     vi.clearAllMocks();
     process.env.CRON_SECRET = "test-cron-secret";
     vi.mocked(processDueAiJobs).mockResolvedValue(1);
+    vi.mocked(processDueChannelDeliveryJobs).mockResolvedValue(0);
   });
 
   afterEach(() => {
@@ -40,12 +45,14 @@ describe("/api/v1/internal/ai-jobs/drain", () => {
     const res = await POST(makeRequest());
     expect(res.status).toBe(401);
     expect(processDueAiJobs).not.toHaveBeenCalled();
+    expect(processDueChannelDeliveryJobs).not.toHaveBeenCalled();
   });
 
   it("returns 401 for the wrong secret", async () => {
     const res = await POST(makeRequest("Bearer other-secret"));
     expect(res.status).toBe(401);
     expect(processDueAiJobs).not.toHaveBeenCalled();
+    expect(processDueChannelDeliveryJobs).not.toHaveBeenCalled();
   });
 
   it("returns 401 when CRON_SECRET is unset", async () => {
@@ -53,6 +60,7 @@ describe("/api/v1/internal/ai-jobs/drain", () => {
     const res = await POST(makeRequest("Bearer test-cron-secret"));
     expect(res.status).toBe(401);
     expect(processDueAiJobs).not.toHaveBeenCalled();
+    expect(processDueChannelDeliveryJobs).not.toHaveBeenCalled();
   });
 
   it("drains jobs with the admin worker on POST", async () => {
@@ -61,12 +69,18 @@ describe("/api/v1/internal/ai-jobs/drain", () => {
     expect(res.status).toBe(200);
     expect(body).toEqual({ data: { claimed: 1 } });
     expect(processDueAiJobs).toHaveBeenCalledWith({ useAdminClient: true });
+    expect(processDueChannelDeliveryJobs).toHaveBeenCalledWith({
+      useAdminClient: true,
+    });
   });
 
   it("accepts GET for Vercel Cron", async () => {
     const res = await GET(makeRequest("Bearer test-cron-secret", "GET"));
     expect(res.status).toBe(200);
     expect(processDueAiJobs).toHaveBeenCalledWith({ useAdminClient: true });
+    expect(processDueChannelDeliveryJobs).toHaveBeenCalledWith({
+      useAdminClient: true,
+    });
   });
 
   it("does not accept organization or job identity from the request", async () => {

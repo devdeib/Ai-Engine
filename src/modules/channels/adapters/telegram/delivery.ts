@@ -71,12 +71,12 @@ export function createTelegramDeliveryAdapter(deps: {
         input.organizationId,
         input.channelAccountId
       );
-      if (!credentials) {
-        logTelegramDeliveryFailure(input, { errorCode: "CREDENTIALS_UNAVAILABLE" });
+      if (!credentials.ok) {
+        logTelegramDeliveryFailure(input, { errorCode: credentials.errorCode });
         return {
           ok: false,
-          errorCode: "CREDENTIALS_UNAVAILABLE",
-          retryable: false,
+          errorCode: credentials.errorCode,
+          retryable: credentials.retryable,
         };
       }
 

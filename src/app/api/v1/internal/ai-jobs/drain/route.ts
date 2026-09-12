@@ -10,6 +10,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { AuthenticationError } from "@/lib/errors";
 import { handleApiError, successResponse } from "@/lib/api/response";
 import { processDueAiJobs } from "@/modules/ai/jobs/worker";
+import { processDueChannelDeliveryJobs } from "@/modules/channels/delivery/worker";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ async function drain(req: NextRequest): Promise<NextResponse> {
     }
 
     const claimed = await processDueAiJobs({ useAdminClient: true });
+    await processDueChannelDeliveryJobs({ useAdminClient: true });
     return successResponse({ claimed });
   });
 }

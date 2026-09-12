@@ -132,6 +132,66 @@ describe("parseTelegramInbound", () => {
     ).toEqual({ status: "ignored" });
   });
 
+  it("maps first_name and last_name onto the canonical sender fields", () => {
+    const result = parseTelegramInbound(
+      textUpdate({
+        extraMessage: {
+          from: {
+            id: Number(CHAT_ID),
+            first_name: "Ahmed",
+            last_name: "Ali",
+            username: "ahmed_ali",
+          },
+        },
+      }),
+      BOT_DEST
+    );
+    expect(result.status).toBe("inbound");
+    if (result.status === "inbound") {
+      expect(result.event.from).toBe(CHAT_ID);
+      expect(result.event.senderFirstName).toBe("Ahmed");
+      expect(result.event.senderLastName).toBe("Ali");
+    }
+  });
+
+  it("maps first_name only onto sender fields", () => {
+    const result = parseTelegramInbound(
+      textUpdate({
+        extraMessage: { from: { id: Number(CHAT_ID), first_name: "Sara" } },
+      }),
+      BOT_DEST
+    );
+    expect(result.status).toBe("inbound");
+    if (result.status === "inbound") {
+      expect(result.event.senderFirstName).toBe("Sara");
+      expect(result.event.senderLastName).toBe("Customer");
+    }
+  });
+
+  it("falls back to username when Telegram omits a first name", () => {
+    const result = parseTelegramInbound(
+      textUpdate({
+        extraMessage: { from: { id: Number(CHAT_ID), username: "sara_q" } },
+      }),
+      BOT_DEST
+    );
+    expect(result.status).toBe("inbound");
+    if (result.status === "inbound") {
+      expect(result.event.senderFirstName).toBe("sara_q");
+      expect(result.event.senderLastName).toBe("Customer");
+    }
+  });
+
+  it("omits sender names when Telegram provided no usable identity fields", () => {
+    const result = parseTelegramInbound(textUpdate(), BOT_DEST);
+    expect(result.status).toBe("inbound");
+    if (result.status === "inbound") {
+      expect(result.event.senderFirstName).toBeUndefined();
+      expect(result.event.senderLastName).toBeUndefined();
+      expect(result.event.from).toBe(CHAT_ID);
+    }
+  });
+
   it("ignores edited messages and unrelated updates", () => {
     expect(
       parseTelegramInbound(

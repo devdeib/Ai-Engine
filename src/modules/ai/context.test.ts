@@ -184,6 +184,7 @@ describe("buildAiContext", () => {
     expect(context.organization.name).toBe("Acme Realty");
     expect(context.organization.salesProfile).toEqual(EMPTY_AI_SALES_PROFILE);
     expect(context.lead.firstName).toBe("Ahmed");
+    expect(context.lead.lastName).toBe("Ali");
     expect(context.lead.email).toBe("ahmed@example.com");
     expect(context.messages).toHaveLength(1);
     expect(context.messages[0]?.body).toBe("Hello");
@@ -197,6 +198,34 @@ describe("buildAiContext", () => {
     expect(JSON.stringify(context)).not.toContain(ORG_A);
     expect(JSON.stringify(context)).not.toContain(LEAD_1);
     expect(JSON.stringify(context)).not.toContain("secret notes");
+  });
+
+  it("uses the CRM lead first name as the model-facing display name", async () => {
+    stubHappyPath();
+    vi.mocked(getLead).mockResolvedValue({
+      id: LEAD_1,
+      organization_id: ORG_A,
+      first_name: "Sara",
+      last_name: "Customer",
+      company_name: null,
+      email: null,
+      phone: null,
+      status: "new",
+      source: "other",
+      score: null,
+      notes: null,
+      owner_id: USER_1,
+      created_at: "2026-08-01T00:00:00Z",
+      updated_at: "2026-08-01T00:00:00Z",
+    });
+    const context = await buildAiContext({
+      organizationId: ORG_A,
+      userId: USER_1,
+      conversationId: CONV_1,
+    });
+    expect(context.lead.firstName).toBe("Sara");
+    expect(context.lead.firstName).not.toBe("Unknown");
+    expect(context.lead.lastName).toBe("Customer");
   });
 
   it("does not include follow-up notes or appointment notes", async () => {
