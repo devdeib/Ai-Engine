@@ -7,10 +7,12 @@
  * followed by a lost response may result in a duplicate send.
  */
 import "server-only";
+import { logger } from "@/lib/logger";
 import { callTelegramBotMethod, telegramApiOk } from "@/modules/channels/adapters/telegram/api";
 import {
   classifyTelegramHttpError,
   classifyTelegramNetworkError,
+  type TelegramClassifiedError,
 } from "@/modules/channels/adapters/telegram/errors";
 import { loadTelegramDeliveryCredentials } from "@/modules/channels/secrets";
 import type {
@@ -18,6 +20,25 @@ import type {
   ChannelDeliverySendInput,
   ChannelDeliverySendResult,
 } from "@/modules/channels/adapters/types";
+
+function logTelegramDeliveryFailure(
+  input: ChannelDeliverySendInput,
+  classified: Pick<
+    TelegramClassifiedError,
+    "errorCode" | "telegramHttpStatus" | "telegramApiErrorCode"
+  >
+): void {
+  logger.warn("Telegram delivery failed", {
+    organizationId: input.organizationId,
+    code: classified.errorCode,
+    ...(classified.telegramHttpStatus !== undefined
+      ? { telegramHttpStatus: classified.telegramHttpStatus }
+      : {}),
+    ...(classified.telegramApiErrorCode !== undefined
+      ? { telegramApiErrorCode: classified.telegramApiErrorCode }
+      : {}),
+  });
+}
 
 type FetchFn = typeof fetch;
 
@@ -51,9 +72,10 @@ export function createTelegramDeliveryAdapter(deps: {
         input.channelAccountId
       );
       if (!credentials) {
+        logTelegramDeliveryFailure(input, { errorCode: "CREDENTIALS_UNAVAILABLE" });
         return {
           ok: false,
-          errorCode: "INVALID_ACCESS_TOKEN",
+          errorCode: "CREDENTIALS_UNAVAILABLE",
           retryable: false,
         };
       }
@@ -80,6 +102,7 @@ export function createTelegramDeliveryAdapter(deps: {
 
       if (response.status < 200 || response.status >= 300 || !telegramApiOk(response.body)) {
         const classified = classifyTelegramHttpError(response.status, response.body);
+        logTelegramDeliveryFailure(input, classified);
         return {
           ok: false,
           errorCode: classified.errorCode,

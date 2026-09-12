@@ -85,10 +85,19 @@ describe("telegramDeliveryAdapter", () => {
     expect(second.idempotencyKey).toBe(MSG_1);
   });
 
+  function loggedOutput(): string {
+    return JSON.stringify([
+      ...vi.mocked(logger.debug).mock.calls,
+      ...vi.mocked(logger.info).mock.calls,
+      ...vi.mocked(logger.warn).mock.calls,
+      ...vi.mocked(logger.error).mock.calls,
+    ]);
+  }
+
   it("does not log the bot token", async () => {
     fetchImpl.mockRejectedValue(new TypeError("fetch failed"));
     await adapter.send(sendInput());
-    const logged = JSON.stringify(vi.mocked(logger.error).mock.calls);
+    const logged = loggedOutput();
     expect(logged).not.toContain(BOT_TOKEN);
     expect(logged).not.toContain("123456:");
   });
@@ -122,16 +131,46 @@ describe("telegramDeliveryAdapter", () => {
     });
   });
 
-  it("maps auth and invalid chat failures without retrying", async () => {
+  it("maps Telegram HTTP 401 as TELEGRAM_HTTP_401 without retrying", async () => {
     fetchImpl.mockResolvedValueOnce(
-      jsonResponse(401, { ok: false, error_code: 401, description: "Unauthorized" })
+      jsonResponse(401, { ok: false, description: "Unauthorized" })
     );
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
-      errorCode: "INVALID_ACCESS_TOKEN",
+      errorCode: "TELEGRAM_HTTP_401",
       retryable: false,
     });
+    expect(vi.mocked(logger.warn).mock.calls[0]?.[1]).toEqual({
+      organizationId: ORG_A,
+      code: "TELEGRAM_HTTP_401",
+      telegramHttpStatus: 401,
+    });
+    expect(loggedOutput()).not.toContain(BOT_TOKEN);
+    expect(loggedOutput()).not.toContain(CHAT_ID);
+    expect(loggedOutput()).not.toContain(BODY);
+  });
 
+  it("maps Telegram JSON error_code 401 as TELEGRAM_HTTP_401 without retrying", async () => {
+    fetchImpl.mockResolvedValueOnce(
+      jsonResponse(200, { ok: false, error_code: 401, description: "Unauthorized" })
+    );
+    await expect(adapter.send(sendInput())).resolves.toEqual({
+      ok: false,
+      errorCode: "TELEGRAM_HTTP_401",
+      retryable: false,
+    });
+    expect(vi.mocked(logger.warn).mock.calls[0]?.[1]).toEqual({
+      organizationId: ORG_A,
+      code: "TELEGRAM_HTTP_401",
+      telegramHttpStatus: 200,
+      telegramApiErrorCode: 401,
+    });
+    expect(loggedOutput()).not.toContain(BOT_TOKEN);
+    expect(loggedOutput()).not.toContain(CHAT_ID);
+    expect(loggedOutput()).not.toContain(BODY);
+  });
+
+  it("maps invalid chat failures without retrying", async () => {
     fetchImpl.mockResolvedValueOnce(
       jsonResponse(400, { ok: false, error_code: 400, description: "Bad Request: chat not found" })
     );
@@ -142,13 +181,20 @@ describe("telegramDeliveryAdapter", () => {
     });
   });
 
-  it("fails closed when credentials cannot be loaded", async () => {
+  it("fails closed with CREDENTIALS_UNAVAILABLE when credentials cannot be loaded", async () => {
     loadCredentials.mockResolvedValueOnce(null);
     await expect(adapter.send(sendInput())).resolves.toEqual({
       ok: false,
-      errorCode: "INVALID_ACCESS_TOKEN",
+      errorCode: "CREDENTIALS_UNAVAILABLE",
       retryable: false,
     });
     expect(fetchImpl).not.toHaveBeenCalled();
+    expect(vi.mocked(logger.warn).mock.calls[0]?.[1]).toEqual({
+      organizationId: ORG_A,
+      code: "CREDENTIALS_UNAVAILABLE",
+    });
+    expect(loggedOutput()).not.toContain(BOT_TOKEN);
+    expect(loggedOutput()).not.toContain(CHAT_ID);
+    expect(loggedOutput()).not.toContain(BODY);
   });
 });

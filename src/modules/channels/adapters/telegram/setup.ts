@@ -97,7 +97,10 @@ export async function setupTelegramChannelWebhook(
       organizationId,
       code: registered.errorCode,
     });
-    if (registered.errorCode === "INVALID_ACCESS_TOKEN") {
+    if (
+      registered.errorCode === "TELEGRAM_HTTP_401" ||
+      registered.errorCode === "INVALID_ACCESS_TOKEN"
+    ) {
       throw new ValidationError("Invalid channel account data", {
         access_token: ["Access token is invalid"],
       });

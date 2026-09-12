@@ -41,8 +41,21 @@ describe("Telegram delivery error mapping", () => {
 
   it("maps auth and blocked-user failures as terminal", () => {
     expect(classifyTelegramHttpError(401, { error_code: 401 })).toEqual({
-      errorCode: "INVALID_ACCESS_TOKEN",
+      errorCode: "TELEGRAM_HTTP_401",
       retryable: false,
+      telegramHttpStatus: 401,
+      telegramApiErrorCode: 401,
+    });
+    expect(classifyTelegramHttpError(200, { error_code: 401 })).toEqual({
+      errorCode: "TELEGRAM_HTTP_401",
+      retryable: false,
+      telegramHttpStatus: 200,
+      telegramApiErrorCode: 401,
+    });
+    expect(classifyTelegramHttpError(401, null)).toEqual({
+      errorCode: "TELEGRAM_HTTP_401",
+      retryable: false,
+      telegramHttpStatus: 401,
     });
     expect(
       classifyTelegramHttpError(403, {

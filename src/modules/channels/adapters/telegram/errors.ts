@@ -7,6 +7,8 @@
 export interface TelegramClassifiedError {
   errorCode: string;
   retryable: boolean;
+  telegramHttpStatus?: number;
+  telegramApiErrorCode?: number;
 }
 
 const RETRYABLE_HTTP = new Set([408, 429, 500, 502, 503, 504]);
@@ -53,7 +55,16 @@ export function classifyTelegramHttpError(
   }
 
   if (apiCode === 401 || status === 401) {
-    return { errorCode: "INVALID_ACCESS_TOKEN", retryable: false };
+    const parsedApiCode = telegramErrorCode(body);
+    const classified: TelegramClassifiedError = {
+      errorCode: "TELEGRAM_HTTP_401",
+      retryable: false,
+      telegramHttpStatus: status,
+    };
+    if (parsedApiCode !== null) {
+      classified.telegramApiErrorCode = parsedApiCode;
+    }
+    return classified;
   }
   if (
     apiCode === 403 ||

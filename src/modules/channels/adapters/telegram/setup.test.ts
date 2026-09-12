@@ -95,6 +95,6 @@ describe("registerTelegramWebhook", () => {
         webhookUrl: WEBHOOK_URL,
         fetchImpl,
       })
-    ).resolves.toEqual({ ok: false, errorCode: "INVALID_ACCESS_TOKEN" });
+    ).resolves.toEqual({ ok: false, errorCode: "TELEGRAM_HTTP_401" });
   });
 });
