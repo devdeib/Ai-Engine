@@ -1,6 +1,9 @@
 /**
  * Allowlisted AI write-back for customer-stated lead facts.
  * Never reuse updateLead() — that PATCH accepts human-only fields.
+ *
+ * Operator edits use applyOperatorQualificationFacts(), a separate merge-patch
+ * path that never records activity and never touches contact or pipeline fields.
  */
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
@@ -20,6 +23,7 @@ import {
   type QualificationFacts,
   type QualificationStatus,
 } from "@/modules/leads/qualification";
+import type { OperatorQualificationFactsPatch } from "@/modules/leads/qualification-schema";
 import type { Lead } from "@/lib/db/types";
 
 export type RecordedCustomerFactField =
@@ -235,4 +239,67 @@ export async function applyRecordedCustomerFacts(
   });
 
   return toResult(saved, savedView, applied, skipped);
+}
+
+function factsEqual(a: QualificationFacts, b: QualificationFacts): boolean {
+  return QUALIFICATION_FACT_KEYS.every(
+    (key) => (a[key] ?? "") === (b[key] ?? "")
+  );
+}
+
+function mergeOperatorFacts(
+  existing: QualificationFacts,
+  patch: OperatorQualificationFactsPatch
+): QualificationFacts {
+  const next: QualificationFacts = { ...existing };
+  for (const key of QUALIFICATION_FACT_KEYS) {
+    const value = patch[key];
+    if (value === undefined) continue;
+    if (value === null || value.trim() === "") {
+      delete next[key];
+    } else {
+      next[key] = value.trim();
+    }
+  }
+  return next;
+}
+
+/**
+ * Human-operator merge-patch for allowlisted qualification facts.
+ * Does not reuse applyRecordedCustomerFacts() or updateLead().
+ */
+export async function applyOperatorQualificationFacts(
+  organizationId: string,
+  userId: string,
+  leadId: string,
+  factsPatch: OperatorQualificationFactsPatch
+): Promise<Lead> {
+  await requireOrgMembership(organizationId, userId);
+
+  const lead = await getLead(leadId, organizationId, userId);
+  const existingFacts = parseQualificationFacts(lead.qualification_facts);
+  const nextFacts = mergeOperatorFacts(existingFacts, factsPatch);
+
+  if (factsEqual(existingFacts, nextFacts)) {
+    return lead;
+  }
+
+  const qualificationUpdatedAt = new Date().toISOString();
+  const supabase = await createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase.from("leads") as any)
+    .update({
+      qualification_facts: nextFacts,
+      qualification_updated_at: qualificationUpdatedAt,
+    })
+    .eq("id", leadId)
+    .eq("organization_id", organizationId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new NotFoundError("Lead");
+  }
+
+  return data as Lead;
 }

@@ -200,6 +200,12 @@ describe("buildAiContext", () => {
     expect(context.pipeline).not.toHaveProperty("missingRequiredFields");
     expect(context.messages).toHaveLength(1);
     expect(context.messages[0]?.body).toBe("Hello");
+    expect(context.latestCustomerMessage).toEqual({
+      direction: "inbound",
+      authorType: "human",
+      body: "Hello",
+      createdAt: "2026-08-21T10:00:00Z",
+    });
     expect(context.followUps[0]?.title).toBe("Call back");
     expect(context.appointments[0]?.location).toBe("Office");
     expect(context.recentActivities[0]?.content).toBe("Called the lead");
@@ -328,5 +334,71 @@ describe("buildAiContext", () => {
     expect(getOrganizationSalesProfile).toHaveBeenCalledWith(ORG_A, null);
     expect(context.organization.name).toBe("Acme Realty");
     expect(context.organization.salesProfile).toEqual(EMPTY_AI_SALES_PROFILE);
+  });
+
+  it("keeps historical messages and marks the triggering inbound as latestCustomerMessage", async () => {
+    stubHappyPath();
+    vi.mocked(listRecentConversationMessages).mockResolvedValue([
+      {
+        id: "m-old",
+        organization_id: ORG_A,
+        conversation_id: CONV_1,
+        author_user_id: null,
+        author_type: "customer",
+        direction: "inbound",
+        body: "I want a villa in Dubai. My budget is around $3M.",
+        in_reply_to_message_id: null,
+        channel_identity_id: null,
+        created_at: "2026-09-12T16:24:28Z",
+      },
+      {
+        id: "m-ai",
+        organization_id: ORG_A,
+        conversation_id: CONV_1,
+        author_user_id: null,
+        author_type: "ai",
+        direction: "outbound",
+        body: "Thanks for your message.",
+        in_reply_to_message_id: "m-old",
+        channel_identity_id: null,
+        created_at: "2026-09-12T16:26:09Z",
+      },
+      {
+        id: "m-latest",
+        organization_id: ORG_A,
+        conversation_id: CONV_1,
+        author_user_id: null,
+        author_type: "customer",
+        direction: "inbound",
+        body: "Two-bedroom apartment in Limassol, budget €250,000.",
+        in_reply_to_message_id: null,
+        channel_identity_id: null,
+        created_at: "2026-09-17T13:51:01Z",
+      },
+    ]);
+
+    const context = await buildAiContext({
+      organizationId: ORG_A,
+      userId: USER_1,
+      conversationId: CONV_1,
+      inboundMessageId: "m-latest",
+    });
+
+    expect(context.messages).toHaveLength(3);
+    expect(context.messages.map((message) => message.body)).toEqual([
+      "I want a villa in Dubai. My budget is around $3M.",
+      "Thanks for your message.",
+      "Two-bedroom apartment in Limassol, budget €250,000.",
+    ]);
+    expect(context.latestCustomerMessage).toEqual({
+      direction: "inbound",
+      authorType: "human",
+      body: "Two-bedroom apartment in Limassol, budget €250,000.",
+      createdAt: "2026-09-17T13:51:01Z",
+    });
+    expect(context.latestCustomerMessage?.body).not.toContain("Dubai");
+    expect(context.latestCustomerMessage?.body).not.toContain("$3M");
+    expect(JSON.stringify(context)).toContain("latestCustomerMessage");
+    expect(JSON.stringify(context.messages)).toContain("villa in Dubai");
   });
 });

@@ -276,7 +276,7 @@ describe("LeadDetailClient — data rendering", () => {
     render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
     await screen.findByRole("heading", { name: "Ahmed Ali" });
 
-    expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
     expect(screen.getByText("Conversation section")).toBeInTheDocument();
   });
@@ -318,7 +318,7 @@ describe("LeadDetailClient — edit mode", () => {
     render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
     await screen.findByRole("heading", { name: "Ahmed Ali" });
 
-    await user.click(screen.getByRole("button", { name: /edit/i }));
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
 
     expect(screen.getByRole("button", { name: /save changes/i })).toBeInTheDocument();
   });
@@ -332,14 +332,14 @@ describe("LeadDetailClient — edit mode", () => {
     render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
     await screen.findByRole("heading", { name: "Ahmed Ali" });
 
-    await user.click(screen.getByRole("button", { name: /edit/i }));
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
     await user.click(screen.getByRole("button", { name: /cancel/i }));
 
     // Edit form is gone; view mode buttons are back
     expect(
       screen.queryByRole("button", { name: /save changes/i })
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeInTheDocument();
   });
 
   it("refreshes the lead and returns to view after successful save", async () => {
@@ -356,7 +356,7 @@ describe("LeadDetailClient — edit mode", () => {
     render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
     await screen.findByRole("heading", { name: "Ahmed Ali" });
 
-    await user.click(screen.getByRole("button", { name: /edit/i }));
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
     await user.click(screen.getByRole("button", { name: /save changes/i }));
 
     // After save: view mode restored with updated name
@@ -406,7 +406,7 @@ describe("LeadDetailClient — delete mode", () => {
     expect(
       screen.queryByRole("alertdialog")
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^edit$/i })).toBeInTheDocument();
   });
 
   it("calls router.push to /dashboard/leads after successful deletion", async () => {
@@ -495,5 +495,185 @@ describe("LeadDetailClient — owner display", () => {
     await screen.findByRole("heading", { name: "Ahmed Ali" });
 
     expect(await screen.findByText("Sarah Manager")).toBeInTheDocument();
+  });
+});
+
+describe("LeadDetailClient — qualification fact edits", () => {
+  it("renders the qualification section in view mode initially", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      makeLeadResponse(makeLead()) as Response
+    );
+
+    render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
+    await screen.findByRole("heading", { name: "Ahmed Ali" });
+
+    expect(screen.getByText("Qualification")).toBeInTheDocument();
+    expect(screen.getByText("Not started")).toBeInTheDocument();
+    expect(screen.getByText("None collected")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /edit facts/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Budget")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /save qualification/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps pipeline status separate from qualification status", async () => {
+    vi.mocked(global.fetch).mockResolvedValue(
+      makeLeadResponse(makeLead({ status: "qualified" })) as Response
+    );
+
+    render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
+    await screen.findByRole("heading", { name: "Ahmed Ali" });
+
+    expect(screen.getAllByText("Qualified").length).toBeGreaterThan(0);
+    expect(screen.getByText("Not started")).toBeInTheDocument();
+    expect(screen.getByText("None collected")).toBeInTheDocument();
+  });
+
+  it("exposes six fact inputs in edit mode", async () => {
+    const user = userEvent.setup();
+    vi.mocked(global.fetch).mockResolvedValue(
+      makeLeadResponse(makeLead()) as Response
+    );
+
+    render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
+    await screen.findByRole("heading", { name: "Ahmed Ali" });
+
+    await user.click(screen.getByRole("button", { name: /edit facts/i }));
+
+    expect(screen.getByLabelText("Budget")).toBeInTheDocument();
+    expect(screen.getByLabelText("Timeline")).toBeInTheDocument();
+    expect(screen.getByLabelText("Location")).toBeInTheDocument();
+    expect(screen.getByLabelText("Property type")).toBeInTheDocument();
+    expect(screen.getByLabelText("Financing")).toBeInTheDocument();
+    expect(screen.getByLabelText("Decision maker")).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/email/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/phone/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not show qualification fact inputs on the Edit Lead form", async () => {
+    const user = userEvent.setup();
+    vi.mocked(global.fetch).mockResolvedValue(
+      makeLeadResponse(makeLead()) as Response
+    );
+
+    render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
+    await screen.findByRole("heading", { name: "Ahmed Ali" });
+
+    await user.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    expect(
+      screen.getByRole("button", { name: /save changes/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Budget")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /save qualification/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves through the dedicated qualification-facts endpoint and replaces local lead data", async () => {
+    const user = userEvent.setup();
+    const updatedLead = makeLead({
+      qualification_facts: { budget: "200k" },
+      qualification_updated_at: "2026-09-13T18:00:00Z",
+    });
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(makeLeadResponse(makeLead()) as Response)
+      .mockResolvedValueOnce(makeEmptyMembersResponse() as Response)
+      .mockResolvedValueOnce(makePatchSuccessResponse(updatedLead) as Response);
+
+    render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
+    await screen.findByRole("heading", { name: "Ahmed Ali" });
+
+    await user.click(screen.getByRole("button", { name: /edit facts/i }));
+    await user.type(screen.getByLabelText("Budget"), "200k");
+    await user.click(screen.getByRole("button", { name: /save qualification/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("200k")).toBeInTheDocument();
+    });
+
+    const patchCall = vi
+      .mocked(global.fetch)
+      .mock.calls.find((call) => {
+        const init = call[1] as RequestInit | undefined;
+        return init?.method === "PATCH";
+      });
+
+    expect(patchCall).toBeDefined();
+    expect(String(patchCall?.[0])).toBe(
+      `/api/v1/organizations/${ORG_A}/leads/${LEAD_ID}/qualification-facts`
+    );
+
+    const body = JSON.parse(String((patchCall?.[1] as RequestInit).body)) as {
+      facts: Record<string, string | null>;
+    };
+    expect(body.facts.budget).toBe("200k");
+    expect(body.facts.timeline).toBeNull();
+    expect(
+      vi.mocked(global.fetch).mock.calls.some((call) => {
+        const init = call[1] as RequestInit | undefined;
+        return (
+          init?.method === "PATCH" &&
+          String(call[0]) ===
+            `/api/v1/organizations/${ORG_A}/leads/${LEAD_ID}`
+        );
+      })
+    ).toBe(false);
+    expect(
+      screen.queryByRole("button", { name: /save qualification/i })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Qualifying")).toBeInTheDocument();
+  });
+
+  it("keeps edit mode when save fails", async () => {
+    const user = userEvent.setup();
+
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(makeLeadResponse(makeLead()) as Response)
+      .mockResolvedValueOnce(makeEmptyMembersResponse() as Response)
+      .mockResolvedValueOnce(make500Response() as Response);
+
+    render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
+    await screen.findByRole("heading", { name: "Ahmed Ali" });
+
+    await user.click(screen.getByRole("button", { name: /edit facts/i }));
+    await user.type(screen.getByLabelText("Budget"), "200k");
+    await user.click(screen.getByRole("button", { name: /save qualification/i }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /save qualification/i })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Budget")).toHaveValue("200k");
+  });
+
+  it("does not send a request when Cancel is clicked", async () => {
+    const user = userEvent.setup();
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(makeLeadResponse(makeLead()) as Response)
+      .mockResolvedValueOnce(makeEmptyMembersResponse() as Response);
+
+    render(<LeadDetailClient organizationId={ORG_A} leadId={LEAD_ID} />);
+    await screen.findByRole("heading", { name: "Ahmed Ali" });
+
+    await user.click(screen.getByRole("button", { name: /edit facts/i }));
+    const callsBeforeCancel = vi.mocked(global.fetch).mock.calls.length;
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(vi.mocked(global.fetch).mock.calls.length).toBe(callsBeforeCancel);
+    expect(
+      screen.queryByRole("button", { name: /save qualification/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /edit facts/i })
+    ).toBeInTheDocument();
   });
 });

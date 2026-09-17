@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -11,6 +11,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -27,9 +29,13 @@ import {
 import {
   QUALIFICATION_FACT_KEYS,
   QUALIFICATION_FACT_LABELS,
+  QUALIFICATION_FACT_VALUE_MAX,
   QUALIFICATION_STATUS_LABELS,
   MISSING_REQUIRED_FIELD_LABELS,
   buildLeadQualificationView,
+  parseQualificationFacts,
+  type QualificationFactKey,
+  type QualificationFacts,
 } from "@/modules/leads/qualification";
 import { EditLeadForm } from "@/modules/leads/components/edit-lead-form";
 import type { OrgMemberOption } from "@/modules/leads/components/lead-table";
@@ -93,61 +99,206 @@ function LeadDetailSkeleton() {
 // Detail field helper
 // ---------------------------------------------------------------------------
 
+type QualificationFactDraft = Record<QualificationFactKey, string>;
+
+function factsToDraft(facts: QualificationFacts): QualificationFactDraft {
+  return {
+    budget: facts.budget ?? "",
+    timeline: facts.timeline ?? "",
+    location: facts.location ?? "",
+    property_type: facts.property_type ?? "",
+    financing: facts.financing ?? "",
+    decision_maker: facts.decision_maker ?? "",
+  };
+}
+
 function LeadQualificationSection({
-  email,
-  phone,
-  qualificationFacts,
+  organizationId,
+  lead,
+  onSaved,
 }: {
-  email: string | null;
-  phone: string | null;
-  qualificationFacts: Record<string, string> | null | undefined;
+  organizationId: string;
+  lead: Lead;
+  onSaved: (lead: Lead) => void;
 }) {
   const qualification = buildLeadQualificationView({
-    email,
-    phone,
-    qualificationFacts,
+    email: lead.email,
+    phone: lead.phone,
+    qualificationFacts: lead.qualification_facts,
   });
   const collected = QUALIFICATION_FACT_KEYS.filter(
     (key) => qualification.facts[key]
   );
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState<QualificationFactDraft>(() =>
+    factsToDraft(parseQualificationFacts(lead.qualification_facts))
+  );
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function startEditing() {
+    setDraft(factsToDraft(parseQualificationFacts(lead.qualification_facts)));
+    setSaveError(null);
+    setIsEditing(true);
+  }
+
+  function cancelEditing() {
+    if (isSaving) return;
+    setSaveError(null);
+    setIsEditing(false);
+  }
+
+  async function handleSave(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (isSaving) return;
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    const facts: Record<QualificationFactKey, string | null> = {
+      budget: draft.budget.trim() || null,
+      timeline: draft.timeline.trim() || null,
+      location: draft.location.trim() || null,
+      property_type: draft.property_type.trim() || null,
+      financing: draft.financing.trim() || null,
+      decision_maker: draft.decision_maker.trim() || null,
+    };
+
+    try {
+      const res = await fetch(
+        `/api/v1/organizations/${organizationId}/leads/${lead.id}/qualification-facts`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ facts }),
+        }
+      );
+
+      if (res.ok) {
+        const json = (await res.json()) as { data: Lead };
+        onSaved(json.data);
+        setIsEditing(false);
+        return;
+      }
+
+      const body = await res
+        .json()
+        .catch(() => ({ error: { message: "Unknown error" } }));
+      setSaveError(
+        body?.error?.message ??
+          "Failed to update qualification facts. Please try again."
+      );
+    } catch {
+      setSaveError(
+        "Network error. Please check your connection and try again."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-          Qualification
-        </CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            Qualification
+          </CardTitle>
+          {!isEditing && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={startEditing}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit facts
+            </Button>
+          )}
+        </div>
       </CardHeader>
-      <CardContent className="space-y-2.5">
-        <DetailField
-          label="Status"
-          value={QUALIFICATION_STATUS_LABELS[qualification.qualificationStatus]}
-        />
-        {collected.length === 0 ? (
-          <DetailField
-            label="Facts"
-            value={null}
-            nullPlaceholder="None collected"
-          />
+      <CardContent>
+        {isEditing ? (
+          <form onSubmit={(e) => void handleSave(e)} className="space-y-3" noValidate>
+            {saveError && (
+              <div
+                role="alert"
+                className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {saveError}
+              </div>
+            )}
+            {QUALIFICATION_FACT_KEYS.map((key) => (
+              <div key={key} className="space-y-1.5">
+                <Label htmlFor={`qualification-fact-${key}`}>
+                  {QUALIFICATION_FACT_LABELS[key]}
+                </Label>
+                <Input
+                  id={`qualification-fact-${key}`}
+                  value={draft[key]}
+                  maxLength={QUALIFICATION_FACT_VALUE_MAX}
+                  disabled={isSaving}
+                  onChange={(event) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      [key]: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+            ))}
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={cancelEditing}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={isSaving}>
+                {isSaving ? "Saving…" : "Save qualification"}
+              </Button>
+            </div>
+          </form>
         ) : (
-          collected.map((key) => (
+          <div className="space-y-2.5">
             <DetailField
-              key={key}
-              label={QUALIFICATION_FACT_LABELS[key]}
-              value={qualification.facts[key] ?? null}
+              label="Status"
+              value={
+                QUALIFICATION_STATUS_LABELS[qualification.qualificationStatus]
+              }
             />
-          ))
+            {collected.length === 0 ? (
+              <DetailField
+                label="Facts"
+                value={null}
+                nullPlaceholder="None collected"
+              />
+            ) : (
+              collected.map((key) => (
+                <DetailField
+                  key={key}
+                  label={QUALIFICATION_FACT_LABELS[key]}
+                  value={qualification.facts[key] ?? null}
+                />
+              ))
+            )}
+            <DetailField
+              label="Missing"
+              value={
+                qualification.missingRequiredFields.length === 0
+                  ? "None"
+                  : qualification.missingRequiredFields
+                      .map((field) => MISSING_REQUIRED_FIELD_LABELS[field])
+                      .join(", ")
+              }
+            />
+          </div>
         )}
-        <DetailField
-          label="Missing"
-          value={
-            qualification.missingRequiredFields.length === 0
-              ? "None"
-              : qualification.missingRequiredFields
-                  .map((field) => MISSING_REQUIRED_FIELD_LABELS[field])
-                  .join(", ")
-          }
-        />
       </CardContent>
     </Card>
   );
@@ -502,9 +653,9 @@ export function LeadDetailClient({
           </div>
 
           <LeadQualificationSection
-            email={lead.email}
-            phone={lead.phone}
-            qualificationFacts={lead.qualification_facts}
+            organizationId={organizationId}
+            lead={lead}
+            onSaved={setLead}
           />
 
           {/* Notes card — only shown when notes are present */}

@@ -127,6 +127,7 @@ const aiContext: AiContext = {
     aiPausedAt: null,
   },
   messages: [],
+  latestCustomerMessage: null,
   followUps: [],
   appointments: [],
   recentActivities: [],
@@ -374,6 +375,12 @@ describe("processConversationMessage", () => {
       outcome: "responded",
       messageId: AI_MSG_ID,
       activityId: ACTIVITY_ID,
+    });
+    expect(buildAiContext).toHaveBeenCalledWith({
+      organizationId: ORG_A,
+      userId: USER_1,
+      conversationId: CONV_1,
+      inboundMessageId: INBOUND_ID,
     });
     expect(capturedInsert.value).toEqual({
       organization_id: ORG_A,
@@ -813,6 +820,12 @@ describe("processConversationMessage", () => {
       expect(result.outcome).toBe("responded");
       expect(requireOrgMembership).not.toHaveBeenCalled();
       expect(getConversation).toHaveBeenCalledWith(ORG_A, null, CONV_1);
+      expect(buildAiContext).toHaveBeenCalledWith({
+        organizationId: ORG_A,
+        userId: null,
+        conversationId: CONV_1,
+        inboundMessageId: INBOUND_ID,
+      });
       expect(listRecentConversationMessages).toHaveBeenCalledWith(
         ORG_A,
         null,

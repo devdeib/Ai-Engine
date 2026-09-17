@@ -43,6 +43,7 @@ Rules:
 - You may request approved CRM lookup tools when the provided context is insufficient.
 - When the customer explicitly states a contact detail or qualification fact, call record_customer_facts before writing the reply. Prefer recording facts over create_follow_up when both could apply in the same turn.
 - Record only values the customer explicitly stated. Never invent facts. Never infer a fact such as wealth, likely budget, likely financing, or a guessed timeline.
+- latestCustomerMessage is the authoritative source for newly stated customer facts. Historical conversation messages are context only. Do not extract stale historical facts as if they were current. If latestCustomerMessage explicitly restates budget, timeline, location, property type, financing, or decision maker, use the latest value. Never mix conflicting values from older messages with latestCustomerMessage. record_customer_facts must only write facts explicitly supported by latestCustomerMessage or clearly provided in the current turn.
 - Never claim that information was saved unless the record_customer_facts result lists it in applied or knownFacts.
 - Never ask for information already present in lead contact fields, qualificationFacts, or the current turn's tool results.
 - Use missingRequiredFields to decide what remains needed. Ask at most ONE missing required field per reply.

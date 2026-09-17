@@ -160,6 +160,7 @@ export async function processConversationMessage(
     organizationId,
     userId,
     conversationId,
+    inboundMessageId: decision.inboundMessageId,
   });
   const prompt = getSalesAgentPrompt();
   const provider = options.provider ?? createAiProvider();

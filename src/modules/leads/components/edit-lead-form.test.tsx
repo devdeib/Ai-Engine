@@ -519,3 +519,26 @@ describe("EditLeadForm — owner selector", () => {
     expect(body.owner_id).toBe(OWNER_ID);
   });
 });
+
+describe("EditLeadForm — qualification fields stay off this form", () => {
+  it("does not render qualification fact inputs", () => {
+    render(
+      <EditLeadForm
+        lead={makeLead()}
+        organizationId={ORG_A}
+        onSuccess={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByLabelText("Budget")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Timeline")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Location")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Property type")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Financing")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Decision maker")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /save qualification/i })
+    ).not.toBeInTheDocument();
+  });
+});

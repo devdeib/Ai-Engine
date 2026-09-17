@@ -257,6 +257,24 @@ describe("PATCH /organizations/:organizationId/leads/:leadId — successful upda
     expect(res.status).toBe(200);
   });
 
+  it("does not accept qualification_facts — the field is stripped before reaching updateLead", async () => {
+    const lead = makeLeadRow();
+    vi.mocked(updateLead).mockResolvedValue(lead);
+
+    const req = makePatchRequest(BASE_PATH, {
+      first_name: "Samir",
+      qualification_facts: { budget: "hacked" },
+    });
+    await PATCH(req, makeContext());
+
+    expect(updateLead).toHaveBeenCalledWith(
+      LEAD_1,
+      ORG_A,
+      USER_1,
+      expect.not.objectContaining({ qualification_facts: expect.anything() })
+    );
+  });
+
   it("cannot change organization_id — the field is stripped before reaching updateLead", async () => {
     const lead = makeLeadRow();
     vi.mocked(updateLead).mockResolvedValue(lead);

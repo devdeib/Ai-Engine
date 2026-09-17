@@ -3,6 +3,7 @@
  * IDs and secrets are omitted from the prompt-facing shape.
  */
 import "server-only";
+import type { Message } from "@/lib/db/types";
 import { getOrganization, getOrganizationName } from "@/modules/organizations/queries";
 import { getOrganizationSalesProfile } from "@/modules/organizations/sales-profile";
 import { getLead } from "@/modules/leads/queries";
@@ -15,6 +16,7 @@ import {
   AI_CONTEXT_MESSAGE_LIMIT,
   AI_CONTEXT_SIDE_LIMIT,
   type AiContext,
+  type AiMessageContext,
   type AiSalesProfileContext,
 } from "@/modules/ai/types";
 import { buildPipelineSnapshot } from "@/modules/ai/pipeline";
@@ -34,10 +36,33 @@ function toAiSalesProfile(
   };
 }
 
+function toAiMessageContext(message: Message): AiMessageContext {
+  return {
+    direction: message.direction,
+    authorType: mapAuthorTypeForAiContext(message.author_type),
+    body: message.body,
+    createdAt: message.created_at,
+  };
+}
+
+function selectLatestCustomerMessage(
+  messages: Message[],
+  inboundMessageId?: string
+): AiMessageContext | null {
+  const selected = inboundMessageId
+    ? messages.find((message) => message.id === inboundMessageId)
+    : [...messages].reverse().find((message) => message.direction === "inbound");
+  if (!selected || selected.direction !== "inbound") {
+    return null;
+  }
+  return toAiMessageContext(selected);
+}
+
 export async function buildAiContext(input: {
   organizationId: string;
   userId: string | null;
   conversationId: string;
+  inboundMessageId?: string;
 }): Promise<AiContext> {
   const conversation = await getConversation(
     input.organizationId,
@@ -117,12 +142,11 @@ export async function buildAiContext(input: {
       requiresHuman: conversation.requires_human,
       aiPausedAt: conversation.ai_paused_at,
     },
-    messages: messages.map((message) => ({
-      direction: message.direction,
-      authorType: mapAuthorTypeForAiContext(message.author_type),
-      body: message.body,
-      createdAt: message.created_at,
-    })),
+    messages: messages.map(toAiMessageContext),
+    latestCustomerMessage: selectLatestCustomerMessage(
+      messages,
+      input.inboundMessageId
+    ),
     followUps: followUps.map((item) => ({
       title: item.title,
       status: item.status,

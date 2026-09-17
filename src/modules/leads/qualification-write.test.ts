@@ -23,7 +23,10 @@ import { createClient } from "@/lib/supabase/server";
 import { requireOrgMembership } from "@/modules/organizations/queries";
 import { getLead } from "@/modules/leads/queries";
 import { recordLeadActivity } from "@/modules/leads/activities/queries";
-import { applyRecordedCustomerFacts } from "@/modules/leads/qualification-write";
+import {
+  applyOperatorQualificationFacts,
+  applyRecordedCustomerFacts,
+} from "@/modules/leads/qualification-write";
 
 const ORG_A = "aaaaaaaa-0000-0000-0000-000000000001";
 const ORG_B = "bbbbbbbb-0000-0000-0000-000000000002";
@@ -62,23 +65,42 @@ function stubLead(overrides: Partial<Lead> = {}): Lead {
   });
 }
 
+const updateCapture: {
+  patch: Record<string, unknown> | null;
+  eq: Array<[string, unknown]>;
+} = {
+  patch: null,
+  eq: [],
+};
+
 function mockUpdate(saved: Lead) {
+  updateCapture.patch = null;
+  updateCapture.eq = [];
   vi.mocked(createClient).mockResolvedValue({
     from: vi.fn().mockImplementation((table: string) => {
       if (table !== "leads") return {};
       return {
-        update: (patch: Record<string, unknown>) => ({
-          eq: () => ({
-            eq: () => ({
-              select: () => ({
-                single: async () => ({
-                  data: { ...saved, ...patch },
-                  error: null,
-                }),
-              }),
-            }),
-          }),
-        }),
+        update: (patch: Record<string, unknown>) => {
+          updateCapture.patch = patch;
+          return {
+            eq: (column: string, value: unknown) => {
+              updateCapture.eq.push([column, value]);
+              return {
+                eq: (column2: string, value2: unknown) => {
+                  updateCapture.eq.push([column2, value2]);
+                  return {
+                    select: () => ({
+                      single: async () => ({
+                        data: { ...saved, ...patch },
+                        error: null,
+                      }),
+                    }),
+                  };
+                },
+              };
+            },
+          };
+        },
       };
     }),
   } as unknown as Awaited<ReturnType<typeof createClient>>);
@@ -208,5 +230,253 @@ describe("applyRecordedCustomerFacts", () => {
     await expect(
       applyRecordedCustomerFacts(ORG_A, USER_1, LEAD_1, { budget: "200k" })
     ).rejects.toThrow(TenantAccessError);
+  });
+});
+
+describe("applyOperatorQualificationFacts", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(requireOrgMembership).mockResolvedValue({
+      id: "member",
+      organization_id: ORG_A,
+      user_id: USER_1,
+      role: "owner",
+      invited_by: null,
+      created_at: "2026-08-19T00:00:00Z",
+      updated_at: "2026-08-19T00:00:00Z",
+    });
+  });
+
+  it("sets budget", async () => {
+    const lead = makeLead();
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    const result = await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      budget: "200k",
+    });
+
+    expect(updateCapture.patch?.qualification_facts).toEqual({ budget: "200k" });
+    expect(result.qualification_facts).toEqual({ budget: "200k" });
+    expect(recordLeadActivity).not.toHaveBeenCalled();
+  });
+
+  it("updates budget", async () => {
+    const lead = makeLead({ qualification_facts: { budget: "100k" } });
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      budget: "250k",
+    });
+
+    expect(updateCapture.patch?.qualification_facts).toEqual({ budget: "250k" });
+  });
+
+  it("sets multiple facts", async () => {
+    const lead = makeLead();
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      budget: "200k",
+      location: "Limassol",
+    });
+
+    expect(updateCapture.patch?.qualification_facts).toEqual({
+      budget: "200k",
+      location: "Limassol",
+    });
+  });
+
+  it("preserves unrelated existing facts on a partial patch", async () => {
+    const lead = makeLead({
+      qualification_facts: {
+        budget: "200k",
+        timeline: "soon",
+        location: "Limassol",
+      },
+    });
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      financing: "cash",
+    });
+
+    expect(updateCapture.patch?.qualification_facts).toEqual({
+      budget: "200k",
+      timeline: "soon",
+      location: "Limassol",
+      financing: "cash",
+    });
+  });
+
+  it("clears one fact when the patch value is null", async () => {
+    const lead = makeLead({
+      qualification_facts: { budget: "200k", timeline: "soon" },
+    });
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      timeline: null,
+    });
+
+    expect(updateCapture.patch?.qualification_facts).toEqual({ budget: "200k" });
+  });
+
+  it("clears one fact when the patch value is blank", async () => {
+    const lead = makeLead({
+      qualification_facts: { budget: "200k", timeline: "soon" },
+    });
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      timeline: "   ",
+    });
+
+    expect(updateCapture.patch?.qualification_facts).toEqual({ budget: "200k" });
+  });
+
+  it("clears all facts when all six keys are null", async () => {
+    const lead = makeLead({
+      qualification_facts: {
+        budget: "1",
+        timeline: "2",
+        location: "3",
+        property_type: "4",
+        financing: "5",
+        decision_maker: "6",
+      },
+    });
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      budget: null,
+      timeline: null,
+      location: null,
+      property_type: null,
+      financing: null,
+      decision_maker: null,
+    });
+
+    expect(updateCapture.patch?.qualification_facts).toEqual({});
+  });
+
+  it("updates qualification_updated_at when facts change", async () => {
+    const lead = makeLead({
+      qualification_facts: { budget: "100k" },
+      qualification_updated_at: "2026-08-19T00:00:00Z",
+    });
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    const result = await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      budget: "200k",
+    });
+
+    expect(updateCapture.patch).toEqual({
+      qualification_facts: { budget: "200k" },
+      qualification_updated_at: expect.any(String),
+    });
+    expect(updateCapture.patch?.qualification_updated_at).not.toBe(
+      "2026-08-19T00:00:00Z"
+    );
+    expect(result.qualification_updated_at).not.toBe("2026-08-19T00:00:00Z");
+    expect(updateCapture.eq).toEqual([
+      ["id", LEAD_1],
+      ["organization_id", ORG_A],
+    ]);
+  });
+
+  it("does not update qualification_updated_at on a no-op write", async () => {
+    const lead = makeLead({
+      qualification_facts: { budget: "200k" },
+      qualification_updated_at: "2026-08-19T00:00:00Z",
+    });
+    vi.mocked(getLead).mockResolvedValue(lead);
+
+    const result = await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      budget: " 200k ",
+    });
+
+    expect(createClient).not.toHaveBeenCalled();
+    expect(recordLeadActivity).not.toHaveBeenCalled();
+    expect(result).toBe(lead);
+    expect(result.qualification_updated_at).toBe("2026-08-19T00:00:00Z");
+  });
+
+  it("never modifies leads.status", async () => {
+    const lead = makeLead({ status: "contacted" });
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    const result = await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      budget: "200k",
+    });
+
+    expect(updateCapture.patch).not.toHaveProperty("status");
+    expect(result.status).toBe("contacted");
+  });
+
+  it("never modifies score, notes, owner, source, or contact fields", async () => {
+    const lead = makeLead({
+      owner_id: USER_1,
+      first_name: "Ahmed",
+      last_name: "Ali",
+      email: "ahmed@example.com",
+      phone: "+974",
+      company_name: "Acme",
+      source: "website",
+      status: "qualified",
+      score: 80,
+      notes: "human notes",
+    });
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    const result = await applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, {
+      budget: "200k",
+    });
+
+    expect(Object.keys(updateCapture.patch ?? {}).sort()).toEqual([
+      "qualification_facts",
+      "qualification_updated_at",
+    ]);
+    expect(result.score).toBe(80);
+    expect(result.notes).toBe("human notes");
+    expect(result.owner_id).toBe(USER_1);
+    expect(result.source).toBe("website");
+    expect(result.email).toBe("ahmed@example.com");
+    expect(result.phone).toBe("+974");
+    expect(result.company_name).toBe("Acme");
+    expect(result.first_name).toBe("Ahmed");
+    expect(result.last_name).toBe("Ali");
+    expect(result.status).toBe("qualified");
+  });
+
+  it("cannot write a lead from another organization", async () => {
+    vi.mocked(getLead).mockRejectedValue(new NotFoundError("Lead"));
+
+    await expect(
+      applyOperatorQualificationFacts(ORG_B, USER_1, LEAD_1, { budget: "200k" })
+    ).rejects.toThrow(NotFoundError);
+
+    expect(createClient).not.toHaveBeenCalled();
+    expect(recordLeadActivity).not.toHaveBeenCalled();
+  });
+
+  it("propagates tenant access errors", async () => {
+    vi.mocked(requireOrgMembership).mockRejectedValue(new TenantAccessError());
+
+    await expect(
+      applyOperatorQualificationFacts(ORG_A, USER_1, LEAD_1, { budget: "200k" })
+    ).rejects.toThrow(TenantAccessError);
+
+    expect(getLead).not.toHaveBeenCalled();
+    expect(createClient).not.toHaveBeenCalled();
   });
 });

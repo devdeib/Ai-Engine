@@ -306,6 +306,17 @@ describe("updateLeadSchema — partial updates", () => {
     const result = updateLeadSchema.safeParse({ score: 150 });
     expect(result.success).toBe(false);
   });
+
+  it("strips qualification_facts (operator edits use a dedicated endpoint)", () => {
+    const result = updateLeadSchema.safeParse({
+      status: "qualified",
+      qualification_facts: { budget: "200k" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect("qualification_facts" in result.data).toBe(false);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

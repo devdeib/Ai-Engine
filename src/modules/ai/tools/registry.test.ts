@@ -47,5 +47,10 @@ describe("AI tool registry", () => {
       expect(encoded).not.toContain("owner_id");
       expect(tool.inputJsonSchema.additionalProperties).toBe(false);
     }
+    const factsSchema = JSON.stringify(
+      getAiTool("record_customer_facts")?.inputJsonSchema
+    );
+    expect(factsSchema).toMatch(/latest customer message in this turn/i);
+    expect(factsSchema).toMatch(/Do not copy older conversation history/i);
   });
 });

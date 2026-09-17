@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   createAppointmentToolInputSchema,
   createFollowUpToolInputSchema,
+  RECORD_CUSTOMER_FACTS_JSON_SCHEMA,
   recordCustomerFactsToolInputSchema,
 } from "@/modules/ai/tools/write-schemas";
 
@@ -130,5 +131,32 @@ describe("recordCustomerFactsToolInputSchema", () => {
         ...FORGED,
       }).success
     ).toBe(false);
+  });
+
+  it("requires current-turn explicit-customer-fact descriptions on JSON schema fields", () => {
+    const properties = RECORD_CUSTOMER_FACTS_JSON_SCHEMA.properties as Record<
+      string,
+      { description?: string }
+    >;
+    for (const key of [
+      "email",
+      "phone",
+      "company_name",
+      "first_name",
+      "last_name",
+      "budget",
+      "timeline",
+      "location",
+      "property_type",
+      "financing",
+      "decision_maker",
+    ]) {
+      expect(properties[key]?.description).toMatch(
+        /latest customer message in this turn/i
+      );
+      expect(properties[key]?.description).toMatch(
+        /Do not copy older conversation history/i
+      );
+    }
   });
 });
