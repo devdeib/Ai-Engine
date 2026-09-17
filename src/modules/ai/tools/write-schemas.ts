@@ -187,13 +187,14 @@ export const recordCustomerFactsToolOutputSchema = z
         })
         .strict()
     ),
-    knownFacts: z.record(z.string(), z.string()),
+    appliedFacts: z.record(z.string(), z.string()),
+    priorFacts: z.record(z.string(), z.string()),
     firstName: z.string(),
     lastName: z.string(),
     email: z.string().nullable(),
     phone: z.string().nullable(),
     companyName: z.string().nullable(),
-    qualificationStatus: z.enum(QUALIFICATION_STATUSES),
+    crmQualificationStatus: z.enum(QUALIFICATION_STATUSES),
     missingRequiredFields: z.array(z.enum(MISSING_REQUIRED_FIELD_ORDER)),
   })
   .strict();

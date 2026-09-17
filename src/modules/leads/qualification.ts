@@ -158,6 +158,7 @@ export function buildLeadQualificationView(input: {
   };
 }
 
+/** AI-facing prior-CRM labels. Does not change stored qualification derivation. */
 export function leadQualificationContextFields(input: {
   email?: string | null;
   phone?: string | null;
@@ -165,8 +166,8 @@ export function leadQualificationContextFields(input: {
 }) {
   const view = buildLeadQualificationView(input);
   return {
-    qualificationFacts: view.facts,
-    qualificationStatus: view.qualificationStatus,
-    missingRequiredFields: view.missingRequiredFields,
+    priorQualificationFacts: view.facts,
+    priorQualificationStatus: view.qualificationStatus,
+    priorMissingRequiredFields: view.missingRequiredFields,
   };
 }

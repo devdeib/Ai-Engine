@@ -525,13 +525,14 @@ function customerFactsSummary(
   return {
     applied: result.applied,
     skipped: result.skipped,
-    knownFacts: result.knownFacts,
+    appliedFacts: result.appliedFacts,
+    priorFacts: result.priorFacts,
     firstName: result.firstName,
     lastName: result.lastName,
     email: result.email,
     phone: result.phone,
     companyName: result.companyName,
-    qualificationStatus: result.qualificationStatus,
+    crmQualificationStatus: result.crmQualificationStatus,
     missingRequiredFields: result.missingRequiredFields,
   };
 }

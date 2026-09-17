@@ -430,13 +430,14 @@ describe("executeRecordCustomerFacts", () => {
   const factsResult = {
     applied: ["email", "budget"] as Array<"email" | "budget">,
     skipped: [],
-    knownFacts: { budget: "200k" },
+    appliedFacts: { budget: "200k" },
+    priorFacts: {},
     firstName: "Ahmed",
     lastName: "Ali",
     email: "ahmed@example.com",
     phone: null,
     companyName: null,
-    qualificationStatus: "qualifying" as const,
+    crmQualificationStatus: "qualifying" as const,
     missingRequiredFields: ["timeline", "location"] as Array<
       "timeline" | "location"
     >,
@@ -457,11 +458,16 @@ describe("executeRecordCustomerFacts", () => {
       factsInput
     );
     expect(result).toEqual(factsResult);
+    expect(result).not.toHaveProperty("knownFacts");
+    expect(result).not.toHaveProperty("qualificationStatus");
     expect(rows[0]?.tool_name).toBe("record_customer_facts");
     expect(rows[0]?.trust).toBe("autonomous");
     expect(rows[0]?.status).toBe("executed");
     expect(rows[0]?.result_resource_type).toBe("lead");
     expect(rows[0]?.result_resource_id).toBe(LEAD_1);
+    expect(rows[0]?.result_summary).toEqual(factsResult);
+    expect(rows[0]?.result_summary).not.toHaveProperty("knownFacts");
+    expect(rows[0]?.result_summary).not.toHaveProperty("qualificationStatus");
     expect(JSON.stringify(result)).not.toContain(ACTION_1);
   });
 
@@ -478,7 +484,8 @@ describe("executeRecordCustomerFacts", () => {
     vi.mocked(applyRecordedCustomerFacts).mockResolvedValue({
       ...factsResult,
       applied: ["timeline"],
-      knownFacts: { budget: "200k", timeline: "3 months" },
+      appliedFacts: { timeline: "3 months" },
+      priorFacts: { budget: "200k" },
     });
     await executeRecordCustomerFacts(ctx, { timeline: "3 months" });
     expect(rows).toHaveLength(2);
