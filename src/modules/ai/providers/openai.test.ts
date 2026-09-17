@@ -27,6 +27,7 @@ const context: AiContext = {
     aiPausedAt: null,
   },
   messages: [],
+  latestCustomerMessage: null,
   followUps: [],
   appointments: [],
   recentActivities: [],

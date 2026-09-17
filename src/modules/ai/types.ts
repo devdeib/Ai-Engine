@@ -115,6 +115,11 @@ export interface AiContext {
   lead: AiLeadContext;
   conversation: AiConversationContext;
   messages: AiMessageContext[];
+  /**
+   * The inbound customer message that triggered this sales-agent turn.
+   * Historical thread text remains in `messages` for context only.
+   */
+  latestCustomerMessage: AiMessageContext | null;
   followUps: AiFollowUpContext[];
   appointments: AiAppointmentContext[];
   recentActivities: AiActivityContext[];

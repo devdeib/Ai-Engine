@@ -228,20 +228,26 @@ export const CREATE_APPOINTMENT_JSON_SCHEMA: Record<string, unknown> = {
   additionalProperties: false,
 };
 
+const CURRENT_TURN_FACT_DESCRIPTION =
+  "Explicit customer-provided value from the latest customer message in this turn. Do not copy older conversation history.";
+
 export const RECORD_CUSTOMER_FACTS_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {
-    email: { type: "string" },
-    phone: { type: "string" },
-    company_name: { type: "string" },
-    first_name: { type: "string" },
-    last_name: { type: "string" },
-    budget: { type: "string" },
-    timeline: { type: "string" },
-    location: { type: "string" },
-    property_type: { type: "string" },
-    financing: { type: "string" },
-    decision_maker: { type: "string" },
+    email: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    phone: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    company_name: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    first_name: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    last_name: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    budget: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    timeline: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    location: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    property_type: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    financing: { type: "string", description: CURRENT_TURN_FACT_DESCRIPTION },
+    decision_maker: {
+      type: "string",
+      description: CURRENT_TURN_FACT_DESCRIPTION,
+    },
   },
   additionalProperties: false,
 };
