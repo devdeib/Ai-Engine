@@ -42,6 +42,7 @@ vi.mock("@/modules/leads/queries", () => ({
 }));
 vi.mock("@/modules/ai/actions/write", () => ({
   executeCreateFollowUp: vi.fn(),
+  executeRecordCustomerFacts: vi.fn(),
   requestCreateAppointment: vi.fn(),
   approveAiToolAction: vi.fn(),
   rejectAiToolAction: vi.fn(),
@@ -68,7 +69,7 @@ import { persistAiSalesAnalysis } from "@/modules/ai/analysis/persist";
 import { persistAiSalesRecommendation } from "@/modules/ai/recommendation/persist";
 import { executeFromRecommendation } from "@/modules/ai/execution/execute";
 import { getLead } from "@/modules/leads/queries";
-import { executeCreateFollowUp, requestCreateAppointment } from "@/modules/ai/actions/write";
+import { executeCreateFollowUp, executeRecordCustomerFacts, requestCreateAppointment } from "@/modules/ai/actions/write";
 import { processConversationMessage } from "@/modules/ai/service";
 import { MockAiProvider } from "@/modules/ai/providers/mock";
 import type { AiContext } from "@/modules/ai/types";
@@ -423,5 +424,64 @@ describe("processConversationMessage tool loop", () => {
         pipeline: expect.objectContaining({ hasPendingAppointmentApproval: true }),
       })
     );
+  });
+
+  it("sends split appliedFacts and priorFacts to the second model turn after email-only record_customer_facts", async () => {
+    mockInsert({ value: null });
+    const priorFacts = {
+      budget: "$3M",
+      location: "Dubai",
+      timeline: "3 months",
+    };
+    vi.mocked(executeRecordCustomerFacts).mockResolvedValue({
+      applied: [],
+      skipped: [{ field: "email", reason: "already_set" }],
+      appliedFacts: {},
+      priorFacts,
+      firstName: "Adeib",
+      lastName: "Customer",
+      email: "adeibbismar@example.com",
+      phone: null,
+      companyName: null,
+      crmQualificationStatus: "qualified",
+      missingRequiredFields: [],
+    });
+    const provider = new MockAiProvider("Thanks for your details.", [
+      {
+        type: "tool_call",
+        id: "facts-1",
+        name: "record_customer_facts",
+        arguments: { email: "nikos@example.com" },
+      },
+    ]);
+    const generateResponse = vi.spyOn(provider, "generateResponse");
+
+    await processConversationMessage(ORG_A, CONV_1, { kind: "operator", userId: USER_1 }, {
+      provider,
+    });
+
+    expect(executeRecordCustomerFacts).toHaveBeenCalledTimes(1);
+    expect(generateResponse).toHaveBeenCalledTimes(2);
+    const second = generateResponse.mock.calls[1]?.[0];
+    const toolResult = second?.history?.[1];
+    expect(toolResult).toEqual(
+      expect.objectContaining({
+        role: "tool",
+        result: {
+          ok: true,
+          name: "record_customer_facts",
+          data: expect.objectContaining({
+            applied: [],
+            appliedFacts: {},
+            priorFacts,
+            crmQualificationStatus: "qualified",
+          }),
+        },
+      })
+    );
+    expect(JSON.stringify(toolResult)).not.toContain("knownFacts");
+    expect(JSON.stringify(toolResult)).not.toMatch(/"qualificationStatus"/);
+    expect(JSON.stringify(second?.context.lead)).toContain("priorQualificationFacts");
+    expect(JSON.stringify(second?.context.lead)).not.toContain("\"qualificationFacts\"");
   });
 });

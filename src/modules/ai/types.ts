@@ -37,9 +37,9 @@ export interface AiLeadContext {
   status: LeadStatus;
   score: number | null;
   notes: string | null;
-  qualificationFacts: QualificationFacts;
-  qualificationStatus: QualificationStatus;
-  missingRequiredFields: MissingRequiredField[];
+  priorQualificationFacts: QualificationFacts;
+  priorQualificationStatus: QualificationStatus;
+  priorMissingRequiredFields: MissingRequiredField[];
 }
 
 export interface AiConversationContext {

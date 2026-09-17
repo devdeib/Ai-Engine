@@ -24,9 +24,9 @@ export const leadContextToolOutputSchema = z
     ]),
     score: z.number().nullable(),
     notes: z.string().nullable(),
-    qualificationFacts: z.record(z.string(), z.string()),
-    qualificationStatus: z.enum(QUALIFICATION_STATUSES),
-    missingRequiredFields: z.array(z.enum(MISSING_REQUIRED_FIELD_ORDER)),
+    priorQualificationFacts: z.record(z.string(), z.string()),
+    priorQualificationStatus: z.enum(QUALIFICATION_STATUSES),
+    priorMissingRequiredFields: z.array(z.enum(MISSING_REQUIRED_FIELD_ORDER)),
   })
   .strict();
 

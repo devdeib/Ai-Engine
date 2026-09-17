@@ -146,14 +146,17 @@ describe("runAiToolCall", () => {
         status: "new",
         score: 10,
         notes: "VIP",
-        qualificationFacts: {},
-        qualificationStatus: "not_started",
-        missingRequiredFields: ["budget", "timeline", "location"],
+        priorQualificationFacts: {},
+        priorQualificationStatus: "not_started",
+        priorMissingRequiredFields: ["budget", "timeline", "location"],
       },
     });
     if (result.ok) {
       expect(JSON.stringify(result.data)).not.toContain(ORG_A);
       expect(JSON.stringify(result.data)).not.toContain(LEAD_1);
+      expect(result.data).not.toHaveProperty("qualificationFacts");
+      expect(result.data).not.toHaveProperty("qualificationStatus");
+      expect(result.data).not.toHaveProperty("missingRequiredFields");
     }
   });
 

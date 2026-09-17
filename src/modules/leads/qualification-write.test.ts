@@ -186,12 +186,48 @@ describe("applyRecordedCustomerFacts", () => {
       budget: "250k",
       location: "Limassol",
     });
-    expect(result.knownFacts).toEqual({
+    expect(result.applied).toEqual(["budget", "location"]);
+    expect(result.appliedFacts).toEqual({
       budget: "250k",
-      timeline: "soon",
       location: "Limassol",
     });
-    expect(result.qualificationStatus).toBe("qualifying");
+    expect(result.priorFacts).toEqual({ timeline: "soon" });
+    expect(result.priorFacts).not.toHaveProperty("budget");
+    expect(result.priorFacts).not.toHaveProperty("location");
+    expect(result.crmQualificationStatus).toBe("qualifying");
+    expect(result).not.toHaveProperty("knownFacts");
+    expect(result).not.toHaveProperty("qualificationStatus");
+  });
+
+  it("projects email-only already_set as empty appliedFacts and prior CRM facts", async () => {
+    const lead = makeLead({
+      email: "ahmed@example.com",
+      qualification_facts: {
+        budget: "$3M",
+        location: "Dubai",
+        timeline: "3 months",
+      },
+    });
+    vi.mocked(getLead).mockResolvedValue(lead);
+    mockUpdate(lead);
+
+    const result = await applyRecordedCustomerFacts(ORG_A, USER_1, LEAD_1, {
+      email: "nikos@example.com",
+    });
+
+    expect(result.applied).toEqual([]);
+    expect(result.appliedFacts).toEqual({});
+    expect(result.skipped).toEqual([{ field: "email", reason: "already_set" }]);
+    expect(result.priorFacts).toEqual({
+      budget: "$3M",
+      location: "Dubai",
+      timeline: "3 months",
+    });
+    expect(result.crmQualificationStatus).toBe("qualified");
+    expect(result.email).toBe("ahmed@example.com");
+    expect(updateCapture.patch).toBeNull();
+    expect(createClient).not.toHaveBeenCalled();
+    expect(recordLeadActivity).not.toHaveBeenCalled();
   });
 
   it("is QUALIFIED when required facts and a phone are present", async () => {
@@ -204,7 +240,14 @@ describe("applyRecordedCustomerFacts", () => {
       location: "Limassol",
       property_type: "apartment",
     });
-    expect(result.qualificationStatus).toBe("qualified");
+    expect(result.appliedFacts).toEqual({
+      budget: "200k",
+      timeline: "3 months",
+      location: "Limassol",
+      property_type: "apartment",
+    });
+    expect(result.priorFacts).toEqual({});
+    expect(result.crmQualificationStatus).toBe("qualified");
     expect(result.missingRequiredFields).toEqual([]);
   });
 

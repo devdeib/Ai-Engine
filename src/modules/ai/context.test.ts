@@ -188,13 +188,16 @@ describe("buildAiContext", () => {
     expect(context.lead.firstName).toBe("Ahmed");
     expect(context.lead.lastName).toBe("Ali");
     expect(context.lead.email).toBe("ahmed@example.com");
-    expect(context.lead.qualificationFacts).toEqual({});
-    expect(context.lead.qualificationStatus).toBe("not_started");
-    expect(context.lead.missingRequiredFields).toEqual([
+    expect(context.lead.priorQualificationFacts).toEqual({});
+    expect(context.lead.priorQualificationStatus).toBe("not_started");
+    expect(context.lead.priorMissingRequiredFields).toEqual([
       "budget",
       "timeline",
       "location",
     ]);
+    expect(context.lead).not.toHaveProperty("qualificationFacts");
+    expect(context.lead).not.toHaveProperty("qualificationStatus");
+    expect(context.lead).not.toHaveProperty("missingRequiredFields");
     expect(context.pipeline).not.toHaveProperty("qualificationStatus");
     expect(context.pipeline).not.toHaveProperty("qualificationFacts");
     expect(context.pipeline).not.toHaveProperty("missingRequiredFields");
@@ -400,5 +403,48 @@ describe("buildAiContext", () => {
     expect(context.latestCustomerMessage?.body).not.toContain("$3M");
     expect(JSON.stringify(context)).toContain("latestCustomerMessage");
     expect(JSON.stringify(context.messages)).toContain("villa in Dubai");
+  });
+
+  it("projects stored CRM facts as prior qualification fields", async () => {
+    stubHappyPath();
+    vi.mocked(getLead).mockResolvedValue({
+      id: LEAD_1,
+      organization_id: ORG_A,
+      first_name: "Adeib",
+      last_name: "Customer",
+      company_name: null,
+      email: "adeibbismar@example.com",
+      phone: null,
+      status: "new",
+      source: "other",
+      score: null,
+      notes: null,
+      owner_id: USER_1,
+      created_at: "2026-08-01T00:00:00Z",
+      updated_at: "2026-08-01T00:00:00Z",
+      qualification_facts: {
+        budget: "$3M",
+        location: "Dubai",
+        timeline: "3 months",
+      },
+      qualification_updated_at: "2026-09-17T13:55:14Z",
+    });
+
+    const context = await buildAiContext({
+      organizationId: ORG_A,
+      userId: USER_1,
+      conversationId: CONV_1,
+    });
+
+    expect(context.lead.priorQualificationFacts).toEqual({
+      budget: "$3M",
+      location: "Dubai",
+      timeline: "3 months",
+    });
+    expect(context.lead.priorQualificationStatus).toBe("qualified");
+    expect(context.lead.priorMissingRequiredFields).toEqual([]);
+    expect(context.lead).not.toHaveProperty("qualificationFacts");
+    expect(context.lead).not.toHaveProperty("qualificationStatus");
+    expect(context.lead).not.toHaveProperty("missingRequiredFields");
   });
 });

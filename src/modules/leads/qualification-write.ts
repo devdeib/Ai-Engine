@@ -58,13 +58,14 @@ export interface RecordCustomerFactsPatch {
 export interface ApplyRecordedCustomerFactsResult {
   applied: RecordedCustomerFactField[];
   skipped: RecordedCustomerFactSkip[];
-  knownFacts: QualificationFacts;
+  appliedFacts: QualificationFacts;
+  priorFacts: QualificationFacts;
   firstName: string;
   lastName: string;
   email: string | null;
   phone: string | null;
   companyName: string | null;
-  qualificationStatus: QualificationStatus;
+  crmQualificationStatus: QualificationStatus;
   missingRequiredFields: MissingRequiredField[];
 }
 
@@ -83,22 +84,52 @@ function snapshot(lead: Lead, facts: QualificationFacts): string {
   });
 }
 
+function isQualificationFactKey(
+  field: RecordedCustomerFactField
+): field is QualificationFactKey {
+  return (QUALIFICATION_FACT_KEYS as readonly string[]).includes(field);
+}
+
+function splitQualificationFacts(
+  facts: QualificationFacts,
+  applied: RecordedCustomerFactField[]
+): { appliedFacts: QualificationFacts; priorFacts: QualificationFacts } {
+  const appliedKeys = new Set(applied.filter(isQualificationFactKey));
+  const appliedFacts: QualificationFacts = {};
+  const priorFacts: QualificationFacts = {};
+  for (const key of QUALIFICATION_FACT_KEYS) {
+    const value = facts[key];
+    if (!value) continue;
+    if (appliedKeys.has(key)) {
+      appliedFacts[key] = value;
+    } else {
+      priorFacts[key] = value;
+    }
+  }
+  return { appliedFacts, priorFacts };
+}
+
 function toResult(
   lead: Lead,
   view: LeadQualificationView,
   applied: RecordedCustomerFactField[],
   skipped: RecordedCustomerFactSkip[]
 ): ApplyRecordedCustomerFactsResult {
+  const { appliedFacts, priorFacts } = splitQualificationFacts(
+    view.facts,
+    applied
+  );
   return {
     applied,
     skipped,
-    knownFacts: view.facts,
+    appliedFacts,
+    priorFacts,
     firstName: lead.first_name,
     lastName: lead.last_name,
     email: lead.email,
     phone: lead.phone,
     companyName: lead.company_name,
-    qualificationStatus: view.qualificationStatus,
+    crmQualificationStatus: view.qualificationStatus,
     missingRequiredFields: view.missingRequiredFields,
   };
 }

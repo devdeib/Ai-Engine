@@ -25,9 +25,9 @@ export const getLeadContextTool: AiToolDefinition = asEmptyInputTool({
       status: lead.status,
       score: lead.score,
       notes: lead.notes,
-      qualificationFacts: qualification.facts,
-      qualificationStatus: qualification.qualificationStatus,
-      missingRequiredFields: qualification.missingRequiredFields,
+      priorQualificationFacts: qualification.facts,
+      priorQualificationStatus: qualification.qualificationStatus,
+      priorMissingRequiredFields: qualification.missingRequiredFields,
     };
   },
 });

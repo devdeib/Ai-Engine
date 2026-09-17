@@ -4,6 +4,7 @@ import {
   createFollowUpToolInputSchema,
   RECORD_CUSTOMER_FACTS_JSON_SCHEMA,
   recordCustomerFactsToolInputSchema,
+  recordCustomerFactsToolOutputSchema,
 } from "@/modules/ai/tools/write-schemas";
 
 const FORGED = {
@@ -158,5 +159,55 @@ describe("recordCustomerFactsToolInputSchema", () => {
         /Do not copy older conversation history/i
       );
     }
+  });
+});
+
+describe("recordCustomerFactsToolOutputSchema", () => {
+  const valid = {
+    applied: ["budget", "location"],
+    skipped: [],
+    appliedFacts: { budget: "€250,000", location: "Limassol" },
+    priorFacts: { timeline: "3 months" },
+    firstName: "Adeib",
+    lastName: "Customer",
+    email: "adeibbismar@example.com",
+    phone: null,
+    companyName: null,
+    crmQualificationStatus: "qualifying",
+    missingRequiredFields: ["contact"],
+  };
+
+  it("accepts appliedFacts, priorFacts, and crmQualificationStatus", () => {
+    const parsed = recordCustomerFactsToolOutputSchema.safeParse(valid);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects knownFacts and unlabeled qualificationStatus", () => {
+    expect(
+      recordCustomerFactsToolOutputSchema.safeParse({
+        ...valid,
+        knownFacts: { budget: "$3M", location: "Dubai" },
+      }).success
+    ).toBe(false);
+    expect(
+      recordCustomerFactsToolOutputSchema.safeParse({
+        applied: [],
+        skipped: [],
+        knownFacts: { budget: "$3M" },
+        firstName: "Adeib",
+        lastName: "Customer",
+        email: null,
+        phone: null,
+        companyName: null,
+        qualificationStatus: "qualified",
+        missingRequiredFields: [],
+      }).success
+    ).toBe(false);
+    expect(
+      recordCustomerFactsToolOutputSchema.safeParse({
+        ...valid,
+        qualificationStatus: "qualified",
+      }).success
+    ).toBe(false);
   });
 });
