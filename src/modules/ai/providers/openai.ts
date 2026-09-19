@@ -26,6 +26,8 @@ import {
 } from "@/modules/ai/types";
 import { buildSalesAgentUserMessage } from "@/modules/ai/prompts";
 import { sanitizeAiReply } from "@/modules/ai/schema";
+import { logger } from "@/lib/logger";
+import { recordOpenAiCall } from "@/lib/latency-trace";
 
 const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -42,6 +44,9 @@ export class OpenAiProvider implements AiProvider {
   async generateResponse(
     input: AiProviderRequest
   ): Promise<AiProviderResponse> {
+    const traceId = input._traceId;
+    const tracePurpose = input._tracePurpose ?? "sales_agent";
+    const startMs = Date.now();
     let response: Response;
     try {
       response = await fetch(OPENAI_CHAT_URL, {
@@ -54,10 +59,14 @@ export class OpenAiProvider implements AiProvider {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch {
+      const endMs = Date.now();
+      logOpenAiTiming(traceId, tracePurpose, this.model, startMs, endMs, null);
       throw new AiProviderError();
     }
 
     if (!response.ok) {
+      const endMs = Date.now();
+      logOpenAiTiming(traceId, tracePurpose, this.model, startMs, endMs, null);
       throw new AiProviderError();
     }
 
@@ -67,6 +76,9 @@ export class OpenAiProvider implements AiProvider {
     } catch {
       throw new AiMalformedResponseError();
     }
+
+    const endMs = Date.now();
+    logOpenAiTiming(traceId, tracePurpose, this.model, startMs, endMs, payload);
 
     return mapOpenAiPayloadToTurn(payload);
   }
@@ -118,6 +130,72 @@ export class OpenAiProvider implements AiProvider {
     }
 
     return parseOpenAiAnalysisPayload(payload);
+  }
+}
+
+function extractUsage(payload: unknown): {
+  promptTokens: number | null;
+  completionTokens: number | null;
+  totalTokens: number | null;
+} {
+  if (!payload || typeof payload !== "object") {
+    return { promptTokens: null, completionTokens: null, totalTokens: null };
+  }
+  const usage = (payload as { usage?: Record<string, unknown> }).usage;
+  if (!usage || typeof usage !== "object") {
+    return { promptTokens: null, completionTokens: null, totalTokens: null };
+  }
+  return {
+    promptTokens: typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : null,
+    completionTokens: typeof usage.completion_tokens === "number" ? usage.completion_tokens : null,
+    totalTokens: typeof usage.total_tokens === "number" ? usage.total_tokens : null,
+  };
+}
+
+function hasToolCallsInPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const choices = (payload as { choices?: unknown[] }).choices;
+  if (!Array.isArray(choices) || choices.length === 0) return false;
+  const message = (choices[0] as { message?: Record<string, unknown> }).message;
+  if (!message) return false;
+  return Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+}
+
+function logOpenAiTiming(
+  traceId: string | undefined,
+  purpose: string,
+  model: string,
+  startMs: number,
+  endMs: number,
+  payload: unknown
+): void {
+  const durationMs = endMs - startMs;
+  const usage = extractUsage(payload);
+  const hasToolCalls = hasToolCallsInPayload(payload);
+
+  logger.info("OPENAI_CALL_TIMING", {
+    traceId: traceId ?? "no-trace",
+    purpose,
+    model,
+    durationMs,
+    hasToolCalls,
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    totalTokens: usage.totalTokens,
+  });
+
+  if (traceId) {
+    recordOpenAiCall(traceId, {
+      purpose,
+      model,
+      startMs,
+      endMs,
+      durationMs,
+      hasToolCalls,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens: usage.totalTokens,
+    });
   }
 }
 

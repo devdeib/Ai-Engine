@@ -8,8 +8,12 @@ import { logger } from "@/lib/logger";
  * context (unit tests), the job remains pending for a later drain.
  */
 export function scheduleAiJobProcessing(task: () => Promise<void>): void {
+  const scheduledAt = Date.now();
   try {
     after(async () => {
+      const afterStartedAt = Date.now();
+      const afterDelayMs = afterStartedAt - scheduledAt;
+      logger.info("AFTER_CALLBACK_DELAY", { afterDelayMs });
       try {
         await task();
       } catch (error: unknown) {

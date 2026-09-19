@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { runWithSupabaseClientOverride } from "@/lib/supabase/client-override";
 import { ConflictError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { recordStage } from "@/lib/latency-trace";
 import { processConversationMessage } from "@/modules/ai/service";
 import {
   channelIngressPrincipal,
@@ -52,6 +53,7 @@ async function drainDueAiJobs(
   });
 
   for (const job of jobs) {
+    recordStage(job.inbound_message_id, "ai_job_claimed");
     await executeClaimedJob(job);
   }
 
@@ -60,11 +62,13 @@ async function drainDueAiJobs(
 
 async function executeClaimedJob(job: AiExecutionJob): Promise<void> {
   try {
+    recordStage(job.inbound_message_id, "job_scope_check_start");
     const scoped = await loadTrustedJobScope(job);
     if (!scoped) {
       await markJobFailed(job, "TENANT_ACCESS_DENIED");
       return;
     }
+    recordStage(job.inbound_message_id, "job_scope_check_done");
 
     const principal = principalFromJob(job);
     if (!principal) {
@@ -72,11 +76,13 @@ async function executeClaimedJob(job: AiExecutionJob): Promise<void> {
       return;
     }
 
+    recordStage(job.inbound_message_id, "ai_processing_start");
     await processConversationMessage(
       job.organization_id,
       job.conversation_id,
       principal
     );
+    recordStage(job.inbound_message_id, "ai_processing_done");
     await markJobCompleted(job);
   } catch (error) {
     if (error instanceof ConflictError) {

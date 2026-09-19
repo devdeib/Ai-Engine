@@ -172,6 +172,10 @@ export interface AiProviderRequest {
   context: AiContext;
   tools?: AiToolDescriptor[];
   history?: AiProviderHistoryItem[];
+  /** Latency trace correlation ID (inbound message ID). Not sent to LLM. */
+  _traceId?: string;
+  /** Human-readable purpose label for this call. Not sent to LLM. */
+  _tracePurpose?: string;
 }
 
 /**

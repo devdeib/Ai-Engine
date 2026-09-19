@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runWithSupabaseClientOverride } from "@/lib/supabase/client-override";
 import { logger } from "@/lib/logger";
+import { recordStage } from "@/lib/latency-trace";
 import {
   CHANNEL_DELIVERY_CLAIM_LIMIT,
   CHANNEL_DELIVERY_CRON_CLAIM_LIMIT,
@@ -62,7 +63,12 @@ async function drainDueChannelDeliveryJobs(
 async function executeClaimedDeliveryJob(
   job: ChannelDeliveryJob
 ): Promise<void> {
+  /* Use the linked inbound message id from the AI job for trace correlation.
+     Delivery jobs don't store it directly, so we use the message_id to look up
+     the in_reply_to_message_id after scope loading. For now, trace by message_id
+     and finalize the trace at the end via any available correlation. */
   try {
+    recordStage(job.message_id, "delivery_job_claimed");
     const scoped = await loadTrustedDeliveryScope(job);
     if (!scoped.ok) {
       await persistDeliveryOutcome(job, {
@@ -72,6 +78,7 @@ async function executeClaimedDeliveryJob(
       });
       return;
     }
+    recordStage(job.message_id, "delivery_scope_loaded");
 
     const existingRef = await loadOutboundMessageRef(job);
     if (
@@ -84,6 +91,7 @@ async function executeClaimedDeliveryJob(
 
     const adapter = getDeliveryAdapter(scoped.account.channel);
     const idempotencyKey = channelDeliveryIdempotencyKey(job.message_id);
+    recordStage(job.message_id, "outbound_api_start");
     const delivered = await adapter.send({
       organizationId: job.organization_id,
       channelAccountId: job.channel_account_id,
@@ -93,6 +101,7 @@ async function executeClaimedDeliveryJob(
       body: scoped.body,
       idempotencyKey,
     });
+    recordStage(job.message_id, "outbound_api_done");
     await persistDeliveryOutcome(job, delivered);
   } catch (error) {
     if (error instanceof UnsupportedChannelError) {

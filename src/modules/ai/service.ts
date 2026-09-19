@@ -64,6 +64,7 @@ import type { AiSalesRecommendationDecision } from "@/modules/ai/recommendation/
 import { executeFromRecommendation } from "@/modules/ai/execution/execute";
 import { AiSalesRecommendationExecutionError } from "@/modules/ai/execution/errors";
 import { logger } from "@/lib/logger";
+import { recordStage } from "@/lib/latency-trace";
 import {
   auditActorFromPrincipal,
   principalUserId,
@@ -143,6 +144,9 @@ export async function processConversationMessage(
   );
 
   const decision = decideAiAction({ conversation, messages });
+  /* For latency tracing: use the inbound message id if responding. */
+  const traceId = decision.action === "respond" ? decision.inboundMessageId : null;
+  if (traceId) recordStage(traceId, "conversation_messages_loaded");
   if (decision.action === "skip") {
     await recoverOutboundDeliveryIfNeeded({
       organizationId,
@@ -156,6 +160,7 @@ export async function processConversationMessage(
     return { outcome: "skipped", reason: decision.reason };
   }
 
+  if (traceId) recordStage(traceId, "context_construction_start");
   const context = await buildAiContext({
     organizationId,
     userId,
@@ -164,6 +169,7 @@ export async function processConversationMessage(
     preloadedConversation: conversation,
     preloadedMessages: messages,
   });
+  if (traceId) recordStage(traceId, "context_construction_done");
   const prompt = getSalesAgentPrompt();
   const provider = options.provider ?? createAiProvider();
   const tools = listAiToolDescriptors();
@@ -180,19 +186,27 @@ export async function processConversationMessage(
 
   let toolCallCount = 0;
   let body: string;
+  let openaiCallIndex = 0;
 
   for (;;) {
+    openaiCallIndex += 1;
+    const callPurpose = openaiCallIndex === 1 ? "sales_agent" : `sales_agent_after_tool_${openaiCallIndex - 1}`;
+    if (traceId) recordStage(traceId, `openai_request_${openaiCallIndex}_start`);
     const generated = await provider.generateResponse({
       systemPrompt: prompt.systemPrompt,
       promptVersion: prompt.version,
       context,
       tools,
       history,
+      _traceId: traceId ?? undefined,
+      _tracePurpose: callPurpose,
     });
+    if (traceId) recordStage(traceId, `openai_response_${openaiCallIndex}_received`);
     const turn = normalizeProviderTurn(generated);
 
     if (turn.type === "text") {
       body = validateAiReply(turn.text);
+      if (traceId) recordStage(traceId, "final_response_generated");
       break;
     }
 
@@ -201,7 +215,9 @@ export async function processConversationMessage(
       throw new AiToolError("AI_TOOL_LIMIT_EXCEEDED");
     }
 
+    if (traceId) recordStage(traceId, `tool_execution_start_${turn.name}`);
     const result = await runAiToolCall(turn, toolContext);
+    if (traceId) recordStage(traceId, `tool_execution_done_${turn.name}`);
     history.push({ role: "assistant", turn });
     history.push({
       role: "tool",
@@ -217,6 +233,7 @@ export async function processConversationMessage(
   /* CRM enrichment — they must not delay the customer-facing response. */
   /* ------------------------------------------------------------------ */
 
+  if (traceId) recordStage(traceId, "message_persist_start");
   const supabase = await createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase.from("messages") as any)
@@ -238,6 +255,7 @@ export async function processConversationMessage(
   if (error || !data) {
     throw new Error("Failed to persist AI message");
   }
+  if (traceId) recordStage(traceId, "message_persisted");
 
   const activity = await recordLeadActivity({
     organizationId,
@@ -259,12 +277,14 @@ export async function processConversationMessage(
     throw new Error("Failed to update conversation recency");
   }
 
+  if (traceId) recordStage(traceId, "delivery_enqueue_start");
   const message = data as Message;
   await enqueueOutboundDeliveryIfExternal({
     organizationId,
     conversation,
     messageId: message.id,
   });
+  if (traceId) recordStage(traceId, "delivery_enqueued");
 
   /* ------------------------------------------------------------------ */
   /* Advisory analysis, recommendation, and execution run after delivery */

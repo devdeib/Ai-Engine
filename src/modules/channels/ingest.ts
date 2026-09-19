@@ -8,6 +8,7 @@ import { runWithSupabaseClientOverride } from "@/lib/supabase/client-override";
 import { createClient } from "@/lib/supabase/server";
 import { AuthenticationError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { startLatencyTrace, recordStage, finalizeLatencyTrace } from "@/lib/latency-trace";
 import { enqueueAiExecutionJob } from "@/modules/ai/jobs/enqueue";
 import { scheduleAiJobProcessing } from "@/modules/ai/jobs/schedule";
 import { processDueAiJobs } from "@/modules/ai/jobs/worker";
@@ -119,6 +120,14 @@ export async function ingestChannelWebhook(input: {
       body: parsed.event.body,
     });
 
+    startLatencyTrace({
+      inboundMessageId: persisted.messageId,
+      organizationId: account.organization_id,
+      conversationId: persisted.conversationId,
+      channel: account.channel,
+    });
+    recordStage(persisted.messageId, "inbound_persisted");
+
     await enqueueChannelIngressJob({
       organizationId: account.organization_id,
       conversationId: persisted.conversationId,
@@ -165,15 +174,20 @@ async function enqueueChannelIngressJob(input: {
     triggerSource: "channel_ingress",
     channelIdentityId: input.channelIdentityId,
   });
+  recordStage(input.inboundMessageId, "ai_job_enqueued");
   scheduleAiJobProcessing(async () => {
+    recordStage(input.inboundMessageId, "after_callback_started");
     await processDueAiJobs({
       organizationId: input.organizationId,
       useAdminClient: true,
     });
+    recordStage(input.inboundMessageId, "ai_jobs_drained");
     await processDueChannelDeliveryJobs({
       organizationId: input.organizationId,
       useAdminClient: true,
     });
+    recordStage(input.inboundMessageId, "delivery_jobs_drained");
+    finalizeLatencyTrace(input.inboundMessageId);
   });
 }
 
