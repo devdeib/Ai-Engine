@@ -24,7 +24,8 @@ export function resolveCurrentOrganization(
     return businessWorkspace;
   }
 
-  return [...organizations].sort((left, right) =>
+  const newest = [...organizations].sort((left, right) =>
     right.created_at.localeCompare(left.created_at)
   )[0];
+  return newest ?? null;
 }
