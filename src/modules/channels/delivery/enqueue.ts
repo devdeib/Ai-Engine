@@ -1,13 +1,16 @@
 /**
  * Enqueue a channel delivery job after the outbound message is persisted.
  * Delivery is not authorization and is not an AI execution authority.
+ *
+ * This module only persists the durable delivery job. It does NOT schedule
+ * background processing. The caller's after() callback (ingest, trigger, or
+ * the cron drain route) drains both AI and delivery jobs in a single
+ * execution, eliminating the nested-after() reliability problem.
  */
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import { CHANNEL_DELIVERY_MAX_ATTEMPTS, isExternalChannel } from "@/modules/channels/constants";
-import { scheduleChannelDeliveryProcessing } from "@/modules/channels/delivery/schedule";
-import { processDueChannelDeliveryJobs } from "@/modules/channels/delivery/worker";
 
 function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -59,13 +62,6 @@ export async function enqueueChannelDelivery(input: {
     });
     throw new Error("Failed to enqueue channel delivery job");
   }
-
-  scheduleChannelDeliveryProcessing(async () => {
-    await processDueChannelDeliveryJobs({
-      organizationId: input.organizationId,
-      useAdminClient: true,
-    });
-  });
 }
 
 export async function enqueueOutboundDeliveryIfExternal(input: {

@@ -15,12 +15,6 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: vi.fn(),
 }));
-vi.mock("@/modules/channels/delivery/schedule", () => ({
-  scheduleChannelDeliveryProcessing: vi.fn(),
-}));
-vi.mock("@/modules/channels/delivery/worker", () => ({
-  processDueChannelDeliveryJobs: vi.fn(),
-}));
 vi.mock("@/lib/logger", () => ({
   logger: {
     debug: vi.fn(),
@@ -32,7 +26,6 @@ vi.mock("@/lib/logger", () => ({
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { scheduleChannelDeliveryProcessing } from "@/modules/channels/delivery/schedule";
 import {
   enqueueChannelDelivery,
   enqueueOutboundDeliveryIfExternal,
@@ -124,7 +117,20 @@ describe("enqueueChannelDelivery", () => {
         max_attempts: 3,
       })
     );
-    expect(scheduleChannelDeliveryProcessing).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not schedule delivery processing (caller handles draining)", async () => {
+    mockInserts({});
+
+    await enqueueChannelDelivery({
+      organizationId: ORG_A,
+      channelAccountId: ACCOUNT_ID,
+      channelIdentityId: IDENTITY_ID,
+      messageId: MSG_1,
+    });
+
+    // Delivery processing is drained by the caller's after() callback
+    // (ingest, trigger, or drain route), not by enqueue itself.
   });
 
   it("treats a unique delivery-job conflict as idempotent success", async () => {
@@ -140,8 +146,6 @@ describe("enqueueChannelDelivery", () => {
         messageId: MSG_1,
       })
     ).resolves.toBeUndefined();
-
-    expect(scheduleChannelDeliveryProcessing).toHaveBeenCalledTimes(1);
   });
 
   it("treats a unique outbound-ref conflict as idempotent and still inserts the job", async () => {
@@ -157,7 +161,6 @@ describe("enqueueChannelDelivery", () => {
     });
 
     expect(jobInsert).toHaveBeenCalledTimes(1);
-    expect(scheduleChannelDeliveryProcessing).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces a non-unique job insert failure without claiming success", async () => {
@@ -175,7 +178,6 @@ describe("enqueueChannelDelivery", () => {
     ).rejects.toThrow("Failed to enqueue channel delivery job");
 
     expect(jobInsert).toHaveBeenCalledTimes(1);
-    expect(scheduleChannelDeliveryProcessing).not.toHaveBeenCalled();
   });
 
   it("surfaces a non-unique ref insert failure without deleting the outbound message", async () => {
@@ -194,7 +196,6 @@ describe("enqueueChannelDelivery", () => {
 
     expect(refInsert).toHaveBeenCalledTimes(1);
     expect(jobInsert).not.toHaveBeenCalled();
-    expect(scheduleChannelDeliveryProcessing).not.toHaveBeenCalled();
   });
 
   it("does not enqueue in_app conversations", async () => {
@@ -214,7 +215,6 @@ describe("enqueueChannelDelivery", () => {
     expect(createClient).not.toHaveBeenCalled();
     expect(refInsert).not.toHaveBeenCalled();
     expect(jobInsert).not.toHaveBeenCalled();
-    expect(scheduleChannelDeliveryProcessing).not.toHaveBeenCalled();
   });
 
   it("does not enqueue when channel_account_id is missing", async () => {
@@ -233,7 +233,6 @@ describe("enqueueChannelDelivery", () => {
     expect(createAdminClient).not.toHaveBeenCalled();
     expect(refInsert).not.toHaveBeenCalled();
     expect(jobInsert).not.toHaveBeenCalled();
-    expect(scheduleChannelDeliveryProcessing).not.toHaveBeenCalled();
   });
 
   it("does not enqueue when channel_identity_id is missing", async () => {
@@ -252,7 +251,6 @@ describe("enqueueChannelDelivery", () => {
     expect(createAdminClient).not.toHaveBeenCalled();
     expect(refInsert).not.toHaveBeenCalled();
     expect(jobInsert).not.toHaveBeenCalled();
-    expect(scheduleChannelDeliveryProcessing).not.toHaveBeenCalled();
   });
 
   it.each(["test", "whatsapp", "email", "sms", "telegram"] as const)(
@@ -274,7 +272,6 @@ describe("enqueueChannelDelivery", () => {
       expect(createClient).not.toHaveBeenCalled();
       expect(refInsert).toHaveBeenCalledTimes(1);
       expect(jobInsert).toHaveBeenCalledTimes(1);
-      expect(scheduleChannelDeliveryProcessing).toHaveBeenCalledTimes(1);
     }
   );
 });

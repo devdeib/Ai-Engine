@@ -12,6 +12,8 @@ import { processDueChannelDeliveryJobs } from "@/modules/channels/delivery/worke
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Delivery-only drain. Budget matches the AI drain route. */
+export const maxDuration = 60;
 
 function isAuthorizedCron(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;

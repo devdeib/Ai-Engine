@@ -14,6 +14,7 @@ import { logger } from "@/lib/logger";
 import { enqueueAiExecutionJob } from "@/modules/ai/jobs/enqueue";
 import { scheduleAiJobProcessing } from "@/modules/ai/jobs/schedule";
 import { processDueAiJobs } from "@/modules/ai/jobs/worker";
+import { processDueChannelDeliveryJobs } from "@/modules/channels/delivery/worker";
 import type { Message } from "@/lib/db/types";
 
 export async function triggerAiAfterInboundMessage(input: {
@@ -38,6 +39,9 @@ export async function triggerAiAfterInboundMessage(input: {
     });
     scheduleAiJobProcessing(async () => {
       await processDueAiJobs({ organizationId: input.organizationId });
+      await processDueChannelDeliveryJobs({
+        organizationId: input.organizationId,
+      });
     });
   } catch (error) {
     logger.error("Failed to enqueue AI execution after inbound message", {

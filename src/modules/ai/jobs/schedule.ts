@@ -9,12 +9,14 @@ import { logger } from "@/lib/logger";
  */
 export function scheduleAiJobProcessing(task: () => Promise<void>): void {
   try {
-    after(() => {
-      void task().catch((error: unknown) => {
+    after(async () => {
+      try {
+        await task();
+      } catch (error: unknown) {
         logger.error("AI job processing failed", {
           code: isAppError(error) ? error.code : "INTERNAL_ERROR",
         });
-      });
+      }
     });
   } catch {
     logger.warn("AI job processing was not scheduled");
