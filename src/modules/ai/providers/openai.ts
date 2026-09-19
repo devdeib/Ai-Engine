@@ -128,7 +128,7 @@ function buildOpenAiRequestBody(
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model,
-    temperature: 0.3,
+    temperature: 0.5,
     max_tokens: maxTokens,
     messages: [
       { role: "system", content: input.systemPrompt },
