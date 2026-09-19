@@ -12,8 +12,6 @@ import {
 } from "@/components/ui/card";
 import type { ConversationWithLead } from "@/lib/db/types";
 import { CreateConversationForm } from "@/modules/conversations/components/create-conversation-form";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { getDemoConversationForLead } from "@/modules/dashboard/demo-catalog";
 
 export interface LeadConversationCardProps {
   organizationId: string;
@@ -34,11 +32,6 @@ export function LeadConversationCard({
   const fetchOpenConversation = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    if (isDemoVideoDataEnabled()) {
-      setOpenConversation(getDemoConversationForLead(leadId) ?? null);
-      setIsLoading(false);
-      return;
-    }
     try {
       const params = new URLSearchParams({
         lead_id: leadId,

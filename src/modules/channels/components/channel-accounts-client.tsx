@@ -15,8 +15,6 @@ import { env } from "@/lib/env";
 import { cn, formatDate } from "@/lib/utils";
 import type { MemberRole } from "@/lib/db/types";
 import { buildChannelWebhookUrl } from "@/modules/channels/webhook-url";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { DEMO_CHANNEL_ACCOUNTS } from "@/modules/dashboard/demo-catalog";
 
 const PAGE_SIZE = 20;
 
@@ -305,16 +303,6 @@ export function ChannelAccountsClient({
   const fetchAccounts = useCallback(async () => {
     setIsLoadingList(true);
     setListError(null);
-    if (isDemoVideoDataEnabled()) {
-      setAccounts(DEMO_CHANNEL_ACCOUNTS);
-      setMeta({
-        page,
-        limit: PAGE_SIZE,
-        count: DEMO_CHANNEL_ACCOUNTS.length,
-      });
-      setIsLoadingList(false);
-      return;
-    }
     try {
       const params = new URLSearchParams({
         page: String(page),

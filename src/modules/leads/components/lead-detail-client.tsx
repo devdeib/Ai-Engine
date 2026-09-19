@@ -46,8 +46,6 @@ import { FollowUpList } from "@/modules/follow-ups/components/follow-up-list";
 import { AppointmentList } from "@/modules/appointments/components/appointment-list";
 import { PendingAiActionsPanel } from "@/modules/ai/components/pending-ai-actions-panel";
 import { AiOperatorInsightPanel } from "@/modules/ai/components/ai-operator-insight-panel";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { DEMO_MEMBERS, getDemoLead } from "@/modules/dashboard/demo-catalog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -342,17 +340,6 @@ export function LeadDetailClient({
   const fetchLead = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
-    if (isDemoVideoDataEnabled()) {
-      const demoLead = getDemoLead(leadId);
-      if (!demoLead) {
-        setFetchError("not-found");
-        setIsLoading(false);
-        return;
-      }
-      setLead(demoLead);
-      setIsLoading(false);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/leads/${leadId}`,
@@ -383,10 +370,6 @@ export function LeadDetailClient({
 
   // Fetch members for owner display + edit form selector.
   const fetchMembers = useCallback(async () => {
-    if (isDemoVideoDataEnabled()) {
-      setMembers(DEMO_MEMBERS);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/members`,

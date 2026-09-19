@@ -10,8 +10,6 @@ import type {
   ActionCenterRecommendationItem,
   AiActionCenter as AiActionCenterData,
 } from "@/modules/ai/action-center/types";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { DEMO_ACTION_CENTER } from "@/modules/dashboard/demo-catalog";
 
 export interface AiActionCenterProps {
   organizationId: string;
@@ -48,11 +46,6 @@ export function AiActionCenter({ organizationId }: AiActionCenterProps) {
   const fetchCenter = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    if (isDemoVideoDataEnabled()) {
-      setData(DEMO_ACTION_CENTER);
-      setIsLoading(false);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/ai/action-center`,

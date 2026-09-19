@@ -1,11 +1,27 @@
 import type { Metadata } from "next";
+import { getUserOrganizations } from "@/modules/auth/queries";
+import { Card, CardContent } from "@/components/ui/card";
 import { OverviewDashboard } from "@/modules/dashboard/components/overview-dashboard";
 
 export const metadata: Metadata = {
   title: "Overview",
 };
 
-// DEMO DATA - TEMPORARY FOR PRODUCT SCREENSHOTS/VIDEO
-export default function DashboardPage() {
-  return <OverviewDashboard />;
+export default async function DashboardPage() {
+  const organizations = await getUserOrganizations();
+  const currentOrg = organizations[0] ?? null;
+
+  if (!currentOrg) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-muted-foreground">
+            No organization found. Please contact support.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <OverviewDashboard organizationId={currentOrg.id} />;
 }

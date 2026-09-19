@@ -19,11 +19,6 @@ import {
   type FollowUpQueueBucket,
 } from "@/modules/follow-ups/lib/follow-up-status";
 import { FollowUpItem } from "@/modules/follow-ups/components/follow-up-item";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import {
-  DEMO_MEMBERS,
-  listDemoFollowUps,
-} from "@/modules/dashboard/demo-catalog";
 
 type QueueTab = "pending" | "completed" | "cancelled" | "all";
 
@@ -64,10 +59,6 @@ export function FollowUpsQueueClient({
   const [updateError, setUpdateError] = useState<string | null>(null);
 
   const fetchMembers = useCallback(async () => {
-    if (isDemoVideoDataEnabled()) {
-      setMembers(DEMO_MEMBERS);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/members`,
@@ -95,13 +86,6 @@ export function FollowUpsQueueClient({
   const fetchFollowUps = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
-    if (isDemoVideoDataEnabled()) {
-      const rows = listDemoFollowUps({ status: tab });
-      setFollowUps(rows);
-      setMeta({ page, limit: 20, count: rows.length });
-      setIsLoading(false);
-      return;
-    }
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -158,15 +142,6 @@ export function FollowUpsQueueClient({
   ) => {
     setUpdatingId(followUpId);
     setUpdateError(null);
-    if (isDemoVideoDataEnabled()) {
-      setFollowUps((current) =>
-        current.map((item) =>
-          item.id === followUpId ? { ...item, status } : item
-        )
-      );
-      setUpdatingId(null);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/follow-ups/${followUpId}`,

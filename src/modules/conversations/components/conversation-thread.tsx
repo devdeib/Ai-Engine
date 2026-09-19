@@ -24,12 +24,6 @@ import {
   CONVERSATION_CHANNEL_LABELS,
   CONVERSATION_STATUS_LABELS,
 } from "@/modules/conversations/lib/conversation-labels";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import {
-  getDemoIdentity,
-  getDemoLead,
-  listDemoMessages,
-} from "@/modules/dashboard/demo-catalog";
 
 const MESSAGE_PAGE_SIZE = 20;
 
@@ -88,13 +82,6 @@ export function ConversationThread({
   const fetchMessages = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
-    if (isDemoVideoDataEnabled()) {
-      const rows = listDemoMessages(conversation.id);
-      setMessages(rows);
-      setCount(rows.length);
-      setIsLoading(false);
-      return;
-    }
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -143,7 +130,6 @@ export function ConversationThread({
       });
       return;
     }
-    const resolvedIdentityId = identityId;
 
     let cancelled = false;
     setIdentity({
@@ -153,18 +139,6 @@ export function ConversationThread({
     });
 
     async function loadIdentityContext() {
-      if (isDemoVideoDataEnabled()) {
-        const identity = getDemoIdentity(resolvedIdentityId);
-        const demoLead = conversation.lead_id
-          ? getDemoLead(conversation.lead_id)
-          : undefined;
-        setIdentity({
-          status: "ready",
-          externalAddress: identity?.externalAddress ?? null,
-          linkState: demoLead ? "linked" : "unmatched",
-        });
-        return;
-      }
       try {
         const identityUrl = `/api/v1/organizations/${organizationId}/channel-identities/${identityId}`;
         const leadUrl = conversation.lead_id
@@ -261,11 +235,6 @@ export function ConversationThread({
     const nextStatus = conversation.status === "open" ? "closed" : "open";
     setIsUpdatingStatus(true);
     setStatusError(null);
-    if (isDemoVideoDataEnabled()) {
-      onConversationUpdated({ ...conversation, status: nextStatus });
-      setIsUpdatingStatus(false);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/conversations/${conversation.id}`,
@@ -293,24 +262,6 @@ export function ConversationThread({
     if (isUpdatingAi) return;
     setIsUpdatingAi(true);
     setStatusError(null);
-    if (isDemoVideoDataEnabled()) {
-      if (path === "pause") {
-        onConversationUpdated({
-          ...conversation,
-          ai_paused_at: new Date().toISOString(),
-        });
-      } else if (path === "resume") {
-        onConversationUpdated({ ...conversation, ai_paused_at: null });
-      } else if (path === "escalate") {
-        onConversationUpdated({
-          ...conversation,
-          requires_human: true,
-          ai_paused_at: new Date().toISOString(),
-        });
-      }
-      setIsUpdatingAi(false);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/conversations/${conversation.id}/ai/${path}`,

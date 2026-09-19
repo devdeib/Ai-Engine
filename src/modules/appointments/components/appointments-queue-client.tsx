@@ -20,11 +20,6 @@ import {
   type AppointmentQueueBucket,
 } from "@/modules/appointments/lib/appointment-labels";
 import { AppointmentItem } from "@/modules/appointments/components/appointment-item";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import {
-  DEMO_MEMBERS,
-  listDemoAppointments,
-} from "@/modules/dashboard/demo-catalog";
 
 type QueueTab = "scheduled" | "completed" | "cancelled" | "all";
 
@@ -59,10 +54,6 @@ export function AppointmentsQueueClient({
   const [updateError, setUpdateError] = useState<string | null>(null);
 
   const fetchMembers = useCallback(async () => {
-    if (isDemoVideoDataEnabled()) {
-      setMembers(DEMO_MEMBERS);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/members`,
@@ -90,13 +81,6 @@ export function AppointmentsQueueClient({
   const fetchAppointments = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
-    if (isDemoVideoDataEnabled()) {
-      const rows = listDemoAppointments({ status: tab });
-      setAppointments(rows);
-      setMeta({ page, limit: 20, count: rows.length });
-      setIsLoading(false);
-      return;
-    }
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -153,15 +137,6 @@ export function AppointmentsQueueClient({
   ) => {
     setUpdatingId(appointmentId);
     setUpdateError(null);
-    if (isDemoVideoDataEnabled()) {
-      setAppointments((current) =>
-        current.map((item) =>
-          item.id === appointmentId ? { ...item, status } : item
-        )
-      );
-      setUpdatingId(null);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/appointments/${appointmentId}`,

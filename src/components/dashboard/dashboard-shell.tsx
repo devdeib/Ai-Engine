@@ -13,8 +13,6 @@ import {
   CalendarDays,
   Zap,
   Settings,
-  Building2,
-  BarChart3,
   LogOut,
   Menu,
   X,
@@ -27,8 +25,6 @@ import { signOutAction } from "@/modules/auth/actions";
 import { ZeusLogo } from "@/components/brand/zeus-logo";
 import { getDashboardPageMeta } from "@/components/dashboard/page-meta";
 import type { Profile, OrganizationWithRole } from "@/lib/db/types";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { DEMO_WORKSPACE } from "@/modules/dashboard/demo-catalog";
 
 interface NavItem {
   label: string;
@@ -49,8 +45,6 @@ const workspaceNav: NavItem[] = [
   { label: "Channels", href: "/dashboard/channels", icon: Radio },
   { label: "Channel Identities", href: "/dashboard/identities", icon: Smartphone },
   { label: "AI Agent", href: "/dashboard/ai-agent", icon: Zap },
-  { label: "Properties", href: "/dashboard/properties", icon: Building2 },
-  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -63,32 +57,20 @@ interface DashboardShellProps {
 
 export function DashboardShell({
   profile,
-  organizations,
   currentOrganization,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const page = getDashboardPageMeta(pathname);
-  const displayProfile = isDemoVideoDataEnabled()
-    ? { ...profile, display_name: DEMO_WORKSPACE.ownerName }
-    : profile;
-  const displayOrganization =
-    isDemoVideoDataEnabled() && currentOrganization
-      ? {
-          ...currentOrganization,
-          name: DEMO_WORKSPACE.organizationName,
-          slug: DEMO_WORKSPACE.slug,
-        }
-      : currentOrganization;
 
   return (
     <div className="flex min-h-[100dvh] bg-background">
       <aside className="hidden lg:flex w-[232px] flex-col fixed inset-y-0 left-0 bg-sidebar border-r border-sidebar-border">
         <SidebarContent
           pathname={pathname}
-          profile={displayProfile}
-          currentOrganization={displayOrganization}
+          profile={profile}
+          currentOrganization={currentOrganization}
         />
       </aside>
 
@@ -108,8 +90,8 @@ export function DashboardShell({
             </button>
             <SidebarContent
               pathname={pathname}
-              profile={displayProfile}
-              currentOrganization={displayOrganization}
+              profile={profile}
+              currentOrganization={currentOrganization}
             />
           </aside>
         </div>
@@ -137,16 +119,16 @@ export function DashboardShell({
           </div>
 
           <div className="flex items-center gap-3">
-            {displayOrganization && (
+            {currentOrganization && (
               <span className="hidden text-xs text-muted-foreground sm:inline">
-                {displayOrganization.name}
+                {currentOrganization.name}
               </span>
             )}
             <div
               className="flex h-8 w-8 items-center justify-center rounded-md bg-zeus-blue/12 text-[11px] font-semibold text-zeus-black"
-              title={displayProfile.display_name}
+              title={profile.display_name}
             >
-              {getInitials(displayProfile.display_name)}
+              {getInitials(profile.display_name)}
             </div>
           </div>
         </header>

@@ -7,8 +7,6 @@ import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/utils";
 import type { AiToolActionPublic } from "@/modules/ai/actions/schema";
 import { actionCenterConversationHref } from "@/modules/ai/action-center/constants";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { getDemoPendingActions } from "@/modules/dashboard/demo-catalog";
 
 export interface PendingAiActionsPanelProps {
   organizationId: string;
@@ -49,15 +47,6 @@ export function PendingAiActionsPanel({
   const fetchActions = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    if (isDemoVideoDataEnabled()) {
-      setActions(
-        getDemoPendingActions({ conversationId, leadId }).filter(
-          (action) => action.status === "pending"
-        )
-      );
-      setIsLoading(false);
-      return;
-    }
     try {
       const params = new URLSearchParams({
         page: "1",
@@ -87,12 +76,6 @@ export function PendingAiActionsPanel({
     if (busyId) return;
     setBusyId(actionId);
     setError(null);
-    if (isDemoVideoDataEnabled()) {
-      setActions((current) => current.filter((action) => action.id !== actionId));
-      setBusyId(null);
-      onDecision?.();
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/ai/actions/${actionId}/${decision}`,

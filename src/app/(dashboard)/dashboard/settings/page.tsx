@@ -3,8 +3,6 @@ import { getCurrentProfile, getUserOrganizations } from "@/modules/auth/queries"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
 import { OrganizationSettingsForm } from "@/modules/organizations/components/organization-settings-form";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { DEMO_WORKSPACE } from "@/modules/dashboard/demo-catalog";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -15,10 +13,6 @@ export default async function SettingsPage() {
   ]);
 
   const currentOrg = organizations[0] ?? null;
-  const demo = isDemoVideoDataEnabled();
-  const displayName = demo ? DEMO_WORKSPACE.ownerName : profile.display_name;
-  const orgName = demo ? DEMO_WORKSPACE.organizationName : currentOrg?.name;
-  const orgSlug = demo ? DEMO_WORKSPACE.slug : currentOrg?.slug;
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -31,14 +25,8 @@ export default async function SettingsPage() {
         <CardContent className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Name</span>
-            <span>{displayName}</span>
+            <span>{profile.display_name}</span>
           </div>
-          {demo ? (
-            <div className="flex justify-between text-sm border-t pt-3">
-              <span className="text-muted-foreground">Role</span>
-              <span>Owner · Sales Director</span>
-            </div>
-          ) : null}
           <div className="flex justify-between text-sm border-t pt-3">
             <span className="text-muted-foreground">Member since</span>
             <span>{formatDate(profile.created_at)}</span>
@@ -51,7 +39,7 @@ export default async function SettingsPage() {
           <OrganizationSettingsForm
             organizationId={currentOrg.id}
             role={currentOrg.role}
-            initialName={orgName ?? currentOrg.name}
+            initialName={currentOrg.name}
           />
           <Card>
             <CardHeader>
@@ -65,7 +53,7 @@ export default async function SettingsPage() {
             <CardContent className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Slug</span>
-                <span className="font-mono text-xs">{orgSlug}</span>
+                <span className="font-mono text-xs">{currentOrg.slug}</span>
               </div>
               <div className="flex justify-between text-sm border-t pt-3">
                 <span className="text-muted-foreground">Created</span>

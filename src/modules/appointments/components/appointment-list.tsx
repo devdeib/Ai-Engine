@@ -20,8 +20,6 @@ import {
   type AppointmentFormValues,
 } from "@/modules/appointments/components/appointment-form";
 import { AppointmentItem } from "@/modules/appointments/components/appointment-item";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { listDemoAppointments } from "@/modules/dashboard/demo-catalog";
 
 export interface AppointmentListProps {
   organizationId: string;
@@ -59,11 +57,6 @@ export function AppointmentList({
   const fetchAppointments = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
-    if (isDemoVideoDataEnabled()) {
-      setAppointments(listDemoAppointments({ leadId }));
-      setIsLoading(false);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/leads/${leadId}/appointments?page=1&limit=20`,

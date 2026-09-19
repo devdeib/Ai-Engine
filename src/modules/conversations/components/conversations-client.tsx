@@ -12,11 +12,6 @@ import {
 } from "@/modules/conversations/components/conversation-thread";
 import { CreateConversationForm } from "@/modules/conversations/components/create-conversation-form";
 import { cn } from "@/lib/utils";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import {
-  DEMO_CONVERSATIONS,
-  getDemoConversation,
-} from "@/modules/dashboard/demo-catalog";
 
 interface ConversationsMeta {
   page: number;
@@ -53,16 +48,6 @@ export function ConversationsClient({ organizationId }: ConversationsClientProps
   const fetchConversations = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
-    if (isDemoVideoDataEnabled()) {
-      setConversations(DEMO_CONVERSATIONS);
-      setMeta({
-        page: currentPage,
-        limit: 20,
-        count: DEMO_CONVERSATIONS.length,
-      });
-      setIsLoading(false);
-      return;
-    }
     try {
       const params = new URLSearchParams({
         page: String(currentPage),
@@ -110,18 +95,11 @@ export function ConversationsClient({ organizationId }: ConversationsClientProps
     const conversationId = selectedId;
     let cancelled = false;
     async function loadDetail() {
-      if (isDemoVideoDataEnabled()) {
-        const demo = getDemoConversation(conversationId);
-        setDetail(demo ?? null);
-        setDetailError(demo ? null : "not-found");
-        setIsLoadingDetail(false);
-        return;
-      }
       setIsLoadingDetail(true);
       setDetailError(null);
       try {
         const res = await fetch(
-          `/api/v1/organizations/${organizationId}/conversations/${selectedId}`,
+          `/api/v1/organizations/${organizationId}/conversations/${conversationId}`,
           { credentials: "same-origin" }
         );
         if (cancelled) return;

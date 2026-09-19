@@ -42,8 +42,6 @@ import {
   ACTIVITY_TYPE_LABELS,
   MANUAL_ACTIVITY_TYPE_OPTIONS,
 } from "@/modules/leads/activities/lib/activity-labels";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { listDemoActivities } from "@/modules/dashboard/demo-catalog";
 
 export { ACTIVITY_TYPE_LABELS };
 
@@ -183,11 +181,6 @@ export function ActivityTimeline({
   const fetchActivities = useCallback(async () => {
     setIsLoadingActivities(true);
     setFetchError(null);
-    if (isDemoVideoDataEnabled()) {
-      setActivities(listDemoActivities(leadId));
-      setIsLoadingActivities(false);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/leads/${leadId}/activities?page=1&limit=20`,

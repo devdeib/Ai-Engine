@@ -17,8 +17,6 @@ import type { LeadFollowUp } from "@/lib/db/types";
 import type { OrgMemberOption } from "@/modules/leads/components/lead-table";
 import { CreateFollowUpForm } from "@/modules/follow-ups/components/create-follow-up-form";
 import { FollowUpItem } from "@/modules/follow-ups/components/follow-up-item";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import { listDemoFollowUps } from "@/modules/dashboard/demo-catalog";
 
 export interface FollowUpListProps {
   organizationId: string;
@@ -55,11 +53,6 @@ export function FollowUpList({
   const fetchFollowUps = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
-    if (isDemoVideoDataEnabled()) {
-      setFollowUps(listDemoFollowUps({ leadId }));
-      setIsLoading(false);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/leads/${leadId}/follow-ups?page=1&limit=20`,

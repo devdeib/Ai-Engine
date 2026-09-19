@@ -15,11 +15,6 @@ import {
   LEAD_SOURCE_OPTIONS,
 } from "@/modules/leads/lib/lead-labels";
 import type { Lead } from "@/lib/db/types";
-import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
-import {
-  DEMO_MEMBERS,
-  listDemoLeads,
-} from "@/modules/dashboard/demo-catalog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -146,10 +141,6 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
   // ---------------------------------------------------------------------------
 
   const fetchMembers = useCallback(async () => {
-    if (isDemoVideoDataEnabled()) {
-      setMembers(DEMO_MEMBERS);
-      return;
-    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/members`,
@@ -208,20 +199,6 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
-    if (isDemoVideoDataEnabled()) {
-      const result = listDemoLeads({
-        search: currentSearch,
-        status: currentStatus,
-        source: currentSource,
-        ownerId: currentOwner,
-        page: currentPage,
-        limit: 20,
-      });
-      setLeads(result.data);
-      setMeta(result.meta);
-      setIsLoading(false);
-      return;
-    }
     try {
       const params = new URLSearchParams();
       params.set("page", String(currentPage));
