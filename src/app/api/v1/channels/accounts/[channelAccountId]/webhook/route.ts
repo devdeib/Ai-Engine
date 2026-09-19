@@ -15,6 +15,12 @@ import { handleWhatsAppWebhookChallenge } from "@/modules/channels/adapters/what
 import { ingestChannelWebhook } from "@/modules/channels/ingest";
 
 export const runtime = "nodejs";
+/**
+ * Webhook ACK is fast (persist + enqueue). The after() callback continues
+ * to run AI + delivery in the background within this budget.
+ * 60s is the Vercel Hobby maximum; Pro allows up to 300s.
+ */
+export const maxDuration = 60;
 
 const paramsSchema = z.object({
   channelAccountId: z.string().uuid("Channel account ID must be a valid UUID"),

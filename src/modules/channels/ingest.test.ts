@@ -30,6 +30,9 @@ vi.mock("@/modules/ai/jobs/schedule", () => ({
 vi.mock("@/modules/ai/jobs/worker", () => ({
   processDueAiJobs: vi.fn(),
 }));
+vi.mock("@/modules/channels/delivery/worker", () => ({
+  processDueChannelDeliveryJobs: vi.fn(),
+}));
 
 import { createClient } from "@/lib/supabase/server";
 import { verifyTestChannelWebhook } from "@/modules/channels/verify";

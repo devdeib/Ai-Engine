@@ -2,7 +2,9 @@
  * GET/POST /api/v1/internal/ai-jobs/drain
  *
  * Claims due AI jobs and runs processConversationMessage.
- * Authenticated with CRON_SECRET (Vercel Cron sends GET + Bearer).
+ * Also drains due channel deliveries so one scheduler wake-up covers both.
+ * Authenticated with CRON_SECRET (HTTP cron / Vercel Cron send GET + Bearer).
+ * Production 1-minute wake-up: docs/pilot-drain-scheduler.md
  * Not a public API. Does not accept tenant or job identity from the client.
  */
 import { timingSafeEqual } from "node:crypto";
@@ -14,6 +16,8 @@ import { processDueChannelDeliveryJobs } from "@/modules/channels/delivery/worke
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Drain claims and processes AI + delivery jobs synchronously in the request. */
+export const maxDuration = 60;
 
 function isAuthorizedCron(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;

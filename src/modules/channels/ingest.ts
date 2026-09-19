@@ -11,6 +11,7 @@ import { logger } from "@/lib/logger";
 import { enqueueAiExecutionJob } from "@/modules/ai/jobs/enqueue";
 import { scheduleAiJobProcessing } from "@/modules/ai/jobs/schedule";
 import { processDueAiJobs } from "@/modules/ai/jobs/worker";
+import { processDueChannelDeliveryJobs } from "@/modules/channels/delivery/worker";
 import {
   getInboundAdapter,
   UnsupportedChannelError,
@@ -166,6 +167,10 @@ async function enqueueChannelIngressJob(input: {
   });
   scheduleAiJobProcessing(async () => {
     await processDueAiJobs({
+      organizationId: input.organizationId,
+      useAdminClient: true,
+    });
+    await processDueChannelDeliveryJobs({
       organizationId: input.organizationId,
       useAdminClient: true,
     });

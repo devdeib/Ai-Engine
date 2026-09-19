@@ -16,6 +16,10 @@ vi.mock("@/modules/ai/jobs/worker", () => ({
   processDueAiJobs: vi.fn(),
 }));
 
+vi.mock("@/modules/channels/delivery/worker", () => ({
+  processDueChannelDeliveryJobs: vi.fn(),
+}));
+
 vi.mock("@/modules/ai/service", () => ({
   processConversationMessage: vi.fn(),
 }));
@@ -32,6 +36,7 @@ vi.mock("@/lib/logger", () => ({
 import { enqueueAiExecutionJob } from "@/modules/ai/jobs/enqueue";
 import { scheduleAiJobProcessing } from "@/modules/ai/jobs/schedule";
 import { processDueAiJobs } from "@/modules/ai/jobs/worker";
+import { processDueChannelDeliveryJobs } from "@/modules/channels/delivery/worker";
 import { processConversationMessage } from "@/modules/ai/service";
 import { triggerAiAfterInboundMessage } from "@/modules/ai/trigger";
 import { logger } from "@/lib/logger";
@@ -181,7 +186,7 @@ describe("triggerAiAfterInboundMessage", () => {
     );
   });
 
-  it("schedules processing that drains jobs for the trusted organization", async () => {
+  it("schedules processing that drains AI and delivery jobs in one execution", async () => {
     await triggerAiAfterInboundMessage({
       organizationId: ORG_A,
       userId: USER_1,
@@ -193,5 +198,8 @@ describe("triggerAiAfterInboundMessage", () => {
     expect(scheduled).toBeTypeOf("function");
     await scheduled?.();
     expect(processDueAiJobs).toHaveBeenCalledWith({ organizationId: ORG_A });
+    expect(processDueChannelDeliveryJobs).toHaveBeenCalledWith({
+      organizationId: ORG_A,
+    });
   });
 });
