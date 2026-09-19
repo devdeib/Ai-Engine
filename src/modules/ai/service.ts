@@ -124,11 +124,13 @@ export async function processConversationMessage(
     await requireOrgMembership(organizationId, principal.userId);
   }
 
+  const convStart = Date.now();
   const conversation = await getConversation(
     organizationId,
     userId,
     conversationId
   );
+  const convDuration = Date.now() - convStart;
   const actor = auditActorFromPrincipal(
     principal,
     conversation.channel_identity_id
@@ -137,17 +139,31 @@ export async function processConversationMessage(
     throw new ValidationError("channel_ingress requires a channel identity");
   }
 
+  const msgStart = Date.now();
   const messages = await listRecentConversationMessages(
     organizationId,
     userId,
     conversationId,
     AI_CONTEXT_MESSAGE_LIMIT
   );
+  const msgDuration = Date.now() - msgStart;
 
   const decision = decideAiAction({ conversation, messages });
   /* For latency tracing: use the inbound message id if responding. */
   const traceId = decision.action === "respond" ? decision.inboundMessageId : null;
-  if (traceId) recordStage(traceId, "conversation_messages_loaded");
+  if (traceId) {
+    recordStage(traceId, "conversation_messages_loaded");
+    logger.info("FORENSIC_CONVERSATION_MESSAGES_LOAD", {
+      traceId,
+      organizationId,
+      conversationId,
+      getConversationMs: convDuration,
+      listMessagesMs: msgDuration,
+      totalMs: convDuration + msgDuration,
+      messageCount: messages.length,
+      sequential: true,
+    });
+  }
   if (decision.action === "skip") {
     await recoverOutboundDeliveryIfNeeded({
       organizationId,
@@ -258,6 +274,7 @@ export async function processConversationMessage(
   }
   if (traceId) recordStage(traceId, "message_persisted");
 
+  const activityStart = Date.now();
   const activity = await recordLeadActivity({
     organizationId,
     userId,
@@ -265,7 +282,9 @@ export async function processConversationMessage(
     type: "ai",
     content: aiResponseGeneratedContent(),
   });
+  const activityDuration = Date.now() - activityStart;
 
+  const bumpStart = Date.now();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bump = await (supabase.from("conversations") as any)
     .update({ updated_at: new Date().toISOString() })
@@ -277,8 +296,19 @@ export async function processConversationMessage(
   if (bump.error) {
     throw new Error("Failed to update conversation recency");
   }
+  const bumpDuration = Date.now() - bumpStart;
 
-  if (traceId) recordStage(traceId, "delivery_enqueue_start");
+  if (traceId) {
+    recordStage(traceId, "delivery_enqueue_start");
+    logger.info("FORENSIC_POST_PERSIST_GAP", {
+      traceId,
+      organizationId,
+      conversationId,
+      recordActivityMs: activityDuration,
+      conversationBumpMs: bumpDuration,
+      totalGapMs: activityDuration + bumpDuration,
+    });
+  }
   const message = data as Message;
   await enqueueOutboundDeliveryIfExternal({
     organizationId,

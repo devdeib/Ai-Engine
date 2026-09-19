@@ -10,6 +10,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
+import { recordStage } from "@/lib/latency-trace";
 import { CHANNEL_DELIVERY_MAX_ATTEMPTS, isExternalChannel } from "@/modules/channels/constants";
 
 function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
@@ -28,6 +29,7 @@ export async function enqueueChannelDelivery(input: {
 }): Promise<void> {
   const supabase = createAdminClient();
 
+  const refStart = Date.now();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const refInsert = await (supabase.from("channel_message_refs") as any).insert({
     organization_id: input.organizationId,
@@ -37,6 +39,7 @@ export async function enqueueChannelDelivery(input: {
     direction: "outbound",
     delivery_status: "queued",
   });
+  const refDuration = Date.now() - refStart;
 
   if (refInsert.error && !isUniqueViolation(refInsert.error)) {
     logger.error("Failed to persist outbound channel message ref", {
@@ -46,6 +49,7 @@ export async function enqueueChannelDelivery(input: {
     throw new Error("Failed to persist outbound channel message ref");
   }
 
+  const jobStart = Date.now();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase.from("channel_delivery_jobs") as any).insert({
     organization_id: input.organizationId,
@@ -54,6 +58,7 @@ export async function enqueueChannelDelivery(input: {
     status: "pending",
     max_attempts: CHANNEL_DELIVERY_MAX_ATTEMPTS,
   });
+  const jobDuration = Date.now() - jobStart;
 
   if (error && !isUniqueViolation(error)) {
     logger.error("Failed to enqueue channel delivery job", {
@@ -62,6 +67,16 @@ export async function enqueueChannelDelivery(input: {
     });
     throw new Error("Failed to enqueue channel delivery job");
   }
+
+  logger.info("FORENSIC_DELIVERY_ENQUEUE", {
+    messageId: input.messageId,
+    organizationId: input.organizationId,
+    insertRefMs: refDuration,
+    insertJobMs: jobDuration,
+    totalMs: refDuration + jobDuration,
+  });
+  recordStage(input.messageId, "delivery_enqueue_ref_inserted");
+  recordStage(input.messageId, "delivery_enqueue_job_inserted");
 }
 
 export async function enqueueOutboundDeliveryIfExternal(input: {

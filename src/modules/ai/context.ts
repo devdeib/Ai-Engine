@@ -10,6 +10,7 @@
  */
 import "server-only";
 import type { ConversationWithLead, Message } from "@/lib/db/types";
+import { logger } from "@/lib/logger";
 import { getOrganization, getOrganizationName } from "@/modules/organizations/queries";
 import { getOrganizationSalesProfile } from "@/modules/organizations/sales-profile";
 import { getLead } from "@/modules/leads/queries";
@@ -107,6 +108,17 @@ export async function buildAiContext(input: {
 
   const needsMessages = !input.preloadedMessages;
 
+  /* Forensic: time each parallel query individually. */
+  const parallelStart = Date.now();
+  const timings: Record<string, number> = {};
+
+  async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
+    const t0 = Date.now();
+    const result = await fn();
+    timings[label] = Date.now() - t0;
+    return result;
+  }
+
   const [
     organizationName,
     salesProfile,
@@ -116,40 +128,63 @@ export async function buildAiContext(input: {
     appointments,
     activities,
   ] = await Promise.all([
-    input.userId
-      ? getOrganization(input.organizationId, input.userId).then(
-          (organization) => organization.name
-        )
-      : getOrganizationName(input.organizationId),
-    getOrganizationSalesProfile(input.organizationId, input.userId),
-    getLead(conversation.lead_id, input.organizationId, input.userId),
-    needsMessages
-      ? listRecentConversationMessages(
-          input.organizationId,
-          input.userId,
-          input.conversationId,
-          AI_CONTEXT_MESSAGE_LIMIT
-        )
-      : Promise.resolve(null),
-    listLeadFollowUps(
-      input.organizationId,
-      input.userId,
-      conversation.lead_id,
-      { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
+    timed("getOrganizationName", () =>
+      input.userId
+        ? getOrganization(input.organizationId, input.userId).then(
+            (organization) => organization.name
+          )
+        : getOrganizationName(input.organizationId)
     ),
-    listLeadAppointments(
-      input.organizationId,
-      input.userId,
-      conversation.lead_id,
-      { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
+    timed("getSalesProfile", () =>
+      getOrganizationSalesProfile(input.organizationId, input.userId)
     ),
-    listLeadActivities(
-      input.organizationId,
-      input.userId,
-      conversation.lead_id,
-      { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
+    timed("getLead", () =>
+      getLead(conversation.lead_id, input.organizationId, input.userId)
+    ),
+    timed("listMessages", () =>
+      needsMessages
+        ? listRecentConversationMessages(
+            input.organizationId,
+            input.userId,
+            input.conversationId,
+            AI_CONTEXT_MESSAGE_LIMIT
+          )
+        : Promise.resolve(null)
+    ),
+    timed("listFollowUps", () =>
+      listLeadFollowUps(
+        input.organizationId,
+        input.userId,
+        conversation.lead_id,
+        { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
+      )
+    ),
+    timed("listAppointments", () =>
+      listLeadAppointments(
+        input.organizationId,
+        input.userId,
+        conversation.lead_id,
+        { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
+      )
+    ),
+    timed("listActivities", () =>
+      listLeadActivities(
+        input.organizationId,
+        input.userId,
+        conversation.lead_id,
+        { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
+      )
     ),
   ]);
+  const parallelTotal = Date.now() - parallelStart;
+
+  logger.info("FORENSIC_CONTEXT_QUERIES", {
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    parallelTotalMs: parallelTotal,
+    messagesSkipped: !needsMessages,
+    ...timings,
+  });
 
   const msgList = input.preloadedMessages ?? loadedMessages ?? [];
 

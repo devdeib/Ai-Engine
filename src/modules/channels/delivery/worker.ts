@@ -48,10 +48,20 @@ async function drainDueChannelDeliveryJobs(
       ? CHANNEL_DELIVERY_CRON_CLAIM_LIMIT
       : CHANNEL_DELIVERY_CLAIM_LIMIT);
 
+  const claimStart = Date.now();
   const jobs = await claimChannelDeliveryJobs({
     limit,
     organizationId: options.organizationId ?? null,
   });
+  const claimDuration = Date.now() - claimStart;
+
+  if (jobs.length > 0) {
+    logger.info("FORENSIC_DELIVERY_CLAIM", {
+      organizationId: options.organizationId ?? "all",
+      claimMs: claimDuration,
+      jobsClaimed: jobs.length,
+    });
+  }
 
   for (const job of jobs) {
     await executeClaimedDeliveryJob(job);
@@ -69,7 +79,9 @@ async function executeClaimedDeliveryJob(
      and finalize the trace at the end via any available correlation. */
   try {
     recordStage(job.message_id, "delivery_job_claimed");
+    const scopeStart = Date.now();
     const scoped = await loadTrustedDeliveryScope(job);
+    const scopeDuration = Date.now() - scopeStart;
     if (!scoped.ok) {
       await persistDeliveryOutcome(job, {
         ok: false,
@@ -80,7 +92,9 @@ async function executeClaimedDeliveryJob(
     }
     recordStage(job.message_id, "delivery_scope_loaded");
 
+    const idempotencyStart = Date.now();
     const existingRef = await loadOutboundMessageRef(job);
+    const idempotencyDuration = Date.now() - idempotencyStart;
     if (
       existingRef?.delivery_status === "sent" &&
       existingRef.provider_message_id
@@ -92,6 +106,7 @@ async function executeClaimedDeliveryJob(
     const adapter = getDeliveryAdapter(scoped.account.channel);
     const idempotencyKey = channelDeliveryIdempotencyKey(job.message_id);
     recordStage(job.message_id, "outbound_api_start");
+    const apiStart = Date.now();
     const delivered = await adapter.send({
       organizationId: job.organization_id,
       channelAccountId: job.channel_account_id,
@@ -101,8 +116,23 @@ async function executeClaimedDeliveryJob(
       body: scoped.body,
       idempotencyKey,
     });
+    const apiDuration = Date.now() - apiStart;
     recordStage(job.message_id, "outbound_api_done");
+
+    const outcomeStart = Date.now();
     await persistDeliveryOutcome(job, delivered);
+    const outcomeDuration = Date.now() - outcomeStart;
+
+    logger.info("FORENSIC_DELIVERY_DRAIN", {
+      messageId: job.message_id,
+      organizationId: job.organization_id,
+      channel: scoped.account.channel,
+      scopeLoadMs: scopeDuration,
+      idempotencyCheckMs: idempotencyDuration,
+      providerApiMs: apiDuration,
+      outcomePersistMs: outcomeDuration,
+      totalMs: scopeDuration + idempotencyDuration + apiDuration + outcomeDuration,
+    });
   } catch (error) {
     if (error instanceof UnsupportedChannelError) {
       await persistDeliveryOutcome(job, {
