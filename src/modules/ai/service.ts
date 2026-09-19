@@ -71,6 +71,7 @@ import {
   type AiExecutionPrincipal,
 } from "@/modules/ai/principal";
 import { enqueueOutboundDeliveryIfExternal } from "@/modules/channels/delivery/enqueue";
+import { processDueChannelDeliveryJobs } from "@/modules/channels/delivery/worker";
 
 function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -287,13 +288,38 @@ export async function processConversationMessage(
   if (traceId) recordStage(traceId, "delivery_enqueued");
 
   /* ------------------------------------------------------------------ */
-  /* Advisory analysis, recommendation, and execution run after delivery */
-  /* is enqueued so the customer receives the response without waiting.  */
+  /* Drain delivery NOW. The durable delivery job is already persisted.  */
+  /* This sends the customer-facing message via the channel API (e.g.   */
+  /* Telegram, WhatsApp) before advisory analysis starts.               */
+  /* The drain is scoped to this organization and is idempotent.        */
+  /* ------------------------------------------------------------------ */
+  if (traceId) recordStage(traceId, "customer_delivery_drain_start");
+  logger.info("CUSTOMER_DELIVERY_STARTED", {
+    organizationId,
+    conversationId,
+    traceId: traceId ?? "no-trace",
+  });
+  await processDueChannelDeliveryJobs({
+    organizationId,
+    useAdminClient: true,
+  });
+  if (traceId) recordStage(traceId, "customer_delivery_drain_done");
+  logger.info("CUSTOMER_DELIVERY_COMPLETED", {
+    organizationId,
+    conversationId,
+    traceId: traceId ?? "no-trace",
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Advisory analysis, recommendation, and execution run AFTER delivery */
+  /* is complete. The customer has already received the response.        */
   /* Failures here are logged but never block the responded outcome.     */
   /* ------------------------------------------------------------------ */
 
   const inbound = messages.find((m) => m.id === decision.inboundMessageId);
+  if (traceId) recordStage(traceId, "advisory_start");
   try {
+    if (traceId) recordStage(traceId, "pipeline_snapshot_start");
     const pipeline = await buildPipelineSnapshot({
       organizationId,
       leadId: conversation.lead_id,
@@ -313,8 +339,10 @@ export async function processConversationMessage(
         createdAt: m.createdAt,
       })),
     });
+    if (traceId) recordStage(traceId, "pipeline_snapshot_done");
     context.pipeline = pipeline;
 
+    if (traceId) recordStage(traceId, "advisory_analysis_start");
     const analysisRow = await recordAdvisoryAnalysis({
       provider,
       context,
@@ -329,7 +357,9 @@ export async function processConversationMessage(
       inboundMessageCreatedAt: inbound?.created_at ?? new Date().toISOString(),
       draftReply: body,
     });
+    if (traceId) recordStage(traceId, "advisory_analysis_done");
 
+    if (traceId) recordStage(traceId, "recommendation_start");
     await recordSalesRecommendation({
       pipeline,
       analysisRow,
@@ -342,7 +372,9 @@ export async function processConversationMessage(
       inboundMessageId: decision.inboundMessageId,
       inboundMessageCreatedAt: inbound?.created_at ?? new Date().toISOString(),
     });
+    if (traceId) recordStage(traceId, "recommendation_done");
 
+    if (traceId) recordStage(traceId, "execution_gate_start");
     await runRecommendationExecution({
       organizationId,
       userId,
@@ -356,6 +388,7 @@ export async function processConversationMessage(
           ? validateAiSalesAnalysis(analysisRow.payload)
           : null,
     });
+    if (traceId) recordStage(traceId, "execution_gate_done");
   } catch {
     logger.error("Post-response advisory processing failed", {
       organizationId,
@@ -363,6 +396,7 @@ export async function processConversationMessage(
       code: "ADVISORY_PROCESSING_FAILED",
     });
   }
+  if (traceId) recordStage(traceId, "advisory_done");
 
   return {
     outcome: "responded",

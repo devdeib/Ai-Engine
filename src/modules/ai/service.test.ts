@@ -47,6 +47,9 @@ vi.mock("@/modules/ai/execution/execute", () => ({
 vi.mock("@/modules/channels/delivery/enqueue", () => ({
   enqueueOutboundDeliveryIfExternal: vi.fn(),
 }));
+vi.mock("@/modules/channels/delivery/worker", () => ({
+  processDueChannelDeliveryJobs: vi.fn(),
+}));
 
 import { createClient } from "@/lib/supabase/server";
 import { requireOrgMembership } from "@/modules/organizations/queries";

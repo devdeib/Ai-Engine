@@ -182,11 +182,15 @@ async function enqueueChannelIngressJob(input: {
       useAdminClient: true,
     });
     recordStage(input.inboundMessageId, "ai_jobs_drained");
+    /* Safety-net drain: the AI service already drains delivery between
+       enqueue and advisory analysis, so the customer has already received
+       the response. This second drain catches any delivery jobs that were
+       not processed (e.g. due to a delivery worker error). */
     await processDueChannelDeliveryJobs({
       organizationId: input.organizationId,
       useAdminClient: true,
     });
-    recordStage(input.inboundMessageId, "delivery_jobs_drained");
+    recordStage(input.inboundMessageId, "delivery_safety_drain_done");
     finalizeLatencyTrace(input.inboundMessageId);
   });
 }

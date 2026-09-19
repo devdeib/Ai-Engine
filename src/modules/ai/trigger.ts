@@ -39,6 +39,9 @@ export async function triggerAiAfterInboundMessage(input: {
     });
     scheduleAiJobProcessing(async () => {
       await processDueAiJobs({ organizationId: input.organizationId });
+      /* Safety-net drain: the AI service already drains delivery between
+         enqueue and advisory analysis. This second drain catches edge cases
+         where the internal drain did not fully complete. */
       await processDueChannelDeliveryJobs({
         organizationId: input.organizationId,
       });

@@ -22,6 +22,9 @@ vi.mock("@/modules/ai/context", () => ({
 vi.mock("@/modules/channels/delivery/enqueue", () => ({
   enqueueOutboundDeliveryIfExternal: vi.fn(),
 }));
+vi.mock("@/modules/channels/delivery/worker", () => ({
+  processDueChannelDeliveryJobs: vi.fn(),
+}));
 vi.mock("@/modules/leads/activities/queries", () => ({
   recordLeadActivity: vi.fn(),
 }));
