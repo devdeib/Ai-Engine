@@ -34,7 +34,7 @@ export class MockAiProvider implements AiProvider {
   ) {}
 
   async generateResponse(
-    input: AiProviderRequest
+    _input: AiProviderRequest
   ): Promise<AiProviderResponse> {
     if (this.scriptIndex < this.script.length) {
       const turn = this.script[this.scriptIndex];
@@ -46,10 +46,9 @@ export class MockAiProvider implements AiProvider {
     if (this.cannedText !== undefined) {
       return { type: "text", text: this.cannedText };
     }
-    const firstName = input.context.lead.firstName.trim() || "there";
     return {
       type: "text",
-      text: `Thanks for your message, ${firstName}. A specialist will follow up with accurate details shortly.`,
+      text: "How can I help you today?",
     };
   }
 

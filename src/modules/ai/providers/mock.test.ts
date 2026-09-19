@@ -55,15 +55,13 @@ describe("MockAiProvider", () => {
     expect(result).toEqual({ type: "text", text: "Hello from mock." });
   });
 
-  it("uses the lead first name when no canned text is set", async () => {
+  it("returns a concise default reply when no canned text is set", async () => {
     const result = await new MockAiProvider().generateResponse({
       systemPrompt: "sys",
       promptVersion: "SALES_AGENT_PROMPT_V1",
       context,
     });
-    expect(result).toEqual(
-      expect.objectContaining({ type: "text", text: expect.stringContaining("Lina") })
-    );
+    expect(result).toEqual({ type: "text", text: "How can I help you today?" });
   });
 
   it("plays a scripted tool-call turn then canned text", async () => {

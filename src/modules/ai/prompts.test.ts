@@ -225,6 +225,83 @@ describe("sales agent prompt", () => {
     expect(parsed.latestCustomerMessage.body).not.toContain("Dubai");
   });
 
+  it("enforces concise conversational response style", () => {
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/1–3 sentences/);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/Match the customer's message length/i);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/Short question or statement from the customer → short reply/i);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/Known facts are context for you, not content for the customer/i);
+  });
+
+  it("discourages repeating known facts in responses", () => {
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Do NOT restate previously known customer facts/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Do NOT produce summaries like/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/I see you're looking for/);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/Based on your requirements/);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/Thank you for providing/);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/Thank you for the update/);
+  });
+
+  it("limits repeated name usage", () => {
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Do NOT address the customer by name repeatedly/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Never insert the name merely because it exists in CRM context/i
+    );
+  });
+
+  it("limits repeated handoff language", () => {
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Do NOT repeat the same handoff phrase/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Communicate handoff once/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /If it has already been said in this conversation, do not say it again/i
+    );
+  });
+
+  it("encourages varied natural acknowledgements", () => {
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/Vary your acknowledgements/i);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/"Got it\."/);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/"No problem\."/);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/"Okay\."/);
+  });
+
+  it("handles requirement-change intents naturally", () => {
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/I changed my mind/);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(/requirement-change intent/i);
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Do NOT assume which specific fact changed/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Do NOT automatically repeat all previous facts/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /No problem\. What would you like instead\?/
+    );
+  });
+
+  it("prioritizes latest user message and direct answers", () => {
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Answer the customer's latest question directly/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /Do NOT lead with a qualification summary before answering a question/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /latest user message has the highest conversational priority/i
+    );
+    expect(SALES_AGENT_PROMPT_V3).toMatch(
+      /newer statement wins/i
+    );
+  });
+
   it("serializes prior CRM qualification labels, not unlabeled current facts", () => {
     const productionShaped: AiContext = {
       ...context,
