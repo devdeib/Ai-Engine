@@ -25,6 +25,7 @@ import {
   LEAD_SOURCE_LABELS,
   LEAD_STATUS_LABELS,
   LEAD_STATUS_CLASSES,
+  QUALIFICATION_STATUS_CLASSES,
 } from "@/modules/leads/lib/lead-labels";
 import {
   QUALIFICATION_FACT_KEYS,
@@ -45,6 +46,8 @@ import { FollowUpList } from "@/modules/follow-ups/components/follow-up-list";
 import { AppointmentList } from "@/modules/appointments/components/appointment-list";
 import { PendingAiActionsPanel } from "@/modules/ai/components/pending-ai-actions-panel";
 import { AiOperatorInsightPanel } from "@/modules/ai/components/ai-operator-insight-panel";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import { DEMO_MEMBERS, getDemoLead } from "@/modules/dashboard/demo-catalog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -203,7 +206,7 @@ function LeadQualificationSection({
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+          <CardTitle className="text-sm font-semibold">
             Qualification
           </CardTitle>
           {!isEditing && (
@@ -278,15 +281,7 @@ function LeadQualificationSection({
                 value={null}
                 nullPlaceholder="None collected"
               />
-            ) : (
-              collected.map((key) => (
-                <DetailField
-                  key={key}
-                  label={QUALIFICATION_FACT_LABELS[key]}
-                  value={qualification.facts[key] ?? null}
-                />
-              ))
-            )}
+            ) : null}
             <DetailField
               label="Missing"
               value={
@@ -314,9 +309,9 @@ function DetailField({
   nullPlaceholder?: string;
 }) {
   return (
-    <div className="flex items-start gap-2 text-sm">
-      <span className="text-muted-foreground w-20 shrink-0">{label}</span>
-      <span className={value ? "" : "text-muted-foreground/50"}>
+    <div className="flex items-start gap-3 text-sm">
+      <span className="text-muted-foreground w-24 shrink-0">{label}</span>
+      <span className={value ? "text-foreground" : "text-muted-foreground/50"}>
         {value ?? nullPlaceholder}
       </span>
     </div>
@@ -347,6 +342,17 @@ export function LeadDetailClient({
   const fetchLead = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
+    if (isDemoVideoDataEnabled()) {
+      const demoLead = getDemoLead(leadId);
+      if (!demoLead) {
+        setFetchError("not-found");
+        setIsLoading(false);
+        return;
+      }
+      setLead(demoLead);
+      setIsLoading(false);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/leads/${leadId}`,
@@ -377,6 +383,10 @@ export function LeadDetailClient({
 
   // Fetch members for owner display + edit form selector.
   const fetchMembers = useCallback(async () => {
+    if (isDemoVideoDataEnabled()) {
+      setMembers(DEMO_MEMBERS);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/members`,
@@ -486,6 +496,11 @@ export function LeadDetailClient({
   const ownerName = lead.owner_id
     ? (members.find((m) => m.user_id === lead.owner_id)?.display_name ?? "—")
     : null;
+  const qualificationView = buildLeadQualificationView({
+    email: lead.email,
+    phone: lead.phone,
+    qualificationFacts: lead.qualification_facts,
+  });
 
   return (
     <div className="space-y-6">
@@ -493,7 +508,7 @@ export function LeadDetailClient({
       <div>
         <Link
           href="/dashboard/leads"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-zeus-blue transition-colors"
         >
           <ChevronLeft className="h-4 w-4" />
           Back to Leads
@@ -507,7 +522,15 @@ export function LeadDetailClient({
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <span
               className={cn(
-                "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+                "inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
+                QUALIFICATION_STATUS_CLASSES[qualificationView.qualificationStatus]
+              )}
+            >
+              {QUALIFICATION_STATUS_LABELS[qualificationView.qualificationStatus]}
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
                 LEAD_STATUS_CLASSES[lead.status]
               )}
             >
@@ -516,11 +539,6 @@ export function LeadDetailClient({
             <span className="text-sm text-muted-foreground">
               {LEAD_SOURCE_LABELS[lead.source]}
             </span>
-            {lead.score !== null && (
-              <span className="text-sm text-muted-foreground">
-                Score: {lead.score}
-              </span>
-            )}
           </div>
         </div>
 
@@ -606,11 +624,34 @@ export function LeadDetailClient({
         </Card>
       ) : (
         <>
-          {/* Contact + Lead details cards */}
+          <section className="rounded-lg border border-border bg-card p-5">
+            <h2 className="text-sm font-semibold">Customer facts</h2>
+            <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {QUALIFICATION_FACT_KEYS.map((key) => (
+                <div key={key}>
+                  <p className="text-xs text-muted-foreground">
+                    {QUALIFICATION_FACT_LABELS[key]}
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-1 text-[15px] font-semibold tracking-tight",
+                      qualificationView.facts[key]
+                        ? "text-foreground"
+                        : "text-muted-foreground/40"
+                    )}
+                  >
+                    {qualificationView.facts[key] ?? "—"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Contact + Lead details */}
           <div className="grid gap-4 sm:grid-cols-2">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                <CardTitle className="text-sm font-semibold">
                   Contact
                 </CardTitle>
               </CardHeader>
@@ -623,8 +664,8 @@ export function LeadDetailClient({
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                  Lead Details
+                <CardTitle className="text-sm font-semibold">
+                  Lead details
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2.5">
@@ -662,7 +703,7 @@ export function LeadDetailClient({
           {lead.notes && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                <CardTitle className="text-sm font-semibold">
                   Notes
                 </CardTitle>
               </CardHeader>

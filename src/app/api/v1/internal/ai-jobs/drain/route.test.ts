@@ -74,7 +74,7 @@ describe("/api/v1/internal/ai-jobs/drain", () => {
     });
   });
 
-  it("accepts GET for Vercel Cron", async () => {
+  it("accepts GET for a scheduled drain wake-up", async () => {
     const res = await GET(makeRequest("Bearer test-cron-secret", "GET"));
     expect(res.status).toBe(200);
     expect(processDueAiJobs).toHaveBeenCalledWith({ useAdminClient: true });

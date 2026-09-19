@@ -3,6 +3,8 @@ import { getCurrentProfile, getUserOrganizations } from "@/modules/auth/queries"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
 import { OrganizationSettingsForm } from "@/modules/organizations/components/organization-settings-form";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import { DEMO_WORKSPACE } from "@/modules/dashboard/demo-catalog";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -13,15 +15,13 @@ export default async function SettingsPage() {
   ]);
 
   const currentOrg = organizations[0] ?? null;
+  const demo = isDemoVideoDataEnabled();
+  const displayName = demo ? DEMO_WORKSPACE.ownerName : profile.display_name;
+  const orgName = demo ? DEMO_WORKSPACE.organizationName : currentOrg?.name;
+  const orgSlug = demo ? DEMO_WORKSPACE.slug : currentOrg?.slug;
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage your account and the facts the AI uses for this company.
-        </p>
-      </div>
 
       <Card>
         <CardHeader>
@@ -31,8 +31,14 @@ export default async function SettingsPage() {
         <CardContent className="space-y-3">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Name</span>
-            <span>{profile.display_name}</span>
+            <span>{displayName}</span>
           </div>
+          {demo ? (
+            <div className="flex justify-between text-sm border-t pt-3">
+              <span className="text-muted-foreground">Role</span>
+              <span>Owner · Sales Director</span>
+            </div>
+          ) : null}
           <div className="flex justify-between text-sm border-t pt-3">
             <span className="text-muted-foreground">Member since</span>
             <span>{formatDate(profile.created_at)}</span>
@@ -45,7 +51,7 @@ export default async function SettingsPage() {
           <OrganizationSettingsForm
             organizationId={currentOrg.id}
             role={currentOrg.role}
-            initialName={currentOrg.name}
+            initialName={orgName ?? currentOrg.name}
           />
           <Card>
             <CardHeader>
@@ -59,7 +65,7 @@ export default async function SettingsPage() {
             <CardContent className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Slug</span>
-                <span className="font-mono text-xs">{currentOrg.slug}</span>
+                <span className="font-mono text-xs">{orgSlug}</span>
               </div>
               <div className="flex justify-between text-sm border-t pt-3">
                 <span className="text-muted-foreground">Created</span>
@@ -73,15 +79,12 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Danger Zone</CardTitle>
-          <CardDescription>
-            Destructive actions. These features will be available in a future
-            phase.
-          </CardDescription>
+          <CardDescription>Destructive actions for this workspace</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
             Account deletion, organization transfer, and data export are not
-            part of this MVP.
+            available yet.
           </p>
         </CardContent>
       </Card>

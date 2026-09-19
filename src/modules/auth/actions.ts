@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
+import { isPublicSignupEnabled } from "@/modules/auth/public-signup";
 
 const signInSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -58,6 +59,12 @@ export async function signUpAction(
   _prevState: AuthActionResult,
   formData: FormData
 ): Promise<AuthActionResult> {
+  if (!isPublicSignupEnabled()) {
+    return {
+      error: "Public sign-up is disabled. Ask an operator for access.",
+    };
+  }
+
   const raw = {
     email: formData.get("email"),
     password: formData.get("password"),

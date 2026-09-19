@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { AlertCircle, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type {
@@ -19,6 +20,16 @@ import {
   type ChannelStubLeadFields,
 } from "@/modules/channels/match";
 import type { ConversationHeaderIdentity } from "@/modules/conversations/components/conversation-header";
+import {
+  CONVERSATION_CHANNEL_LABELS,
+  CONVERSATION_STATUS_LABELS,
+} from "@/modules/conversations/lib/conversation-labels";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import {
+  getDemoIdentity,
+  getDemoLead,
+  listDemoMessages,
+} from "@/modules/dashboard/demo-catalog";
 
 const MESSAGE_PAGE_SIZE = 20;
 
@@ -35,7 +46,7 @@ export function ConversationThreadSkeleton() {
             key={i}
             className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}
           >
-            <div className="h-12 w-48 rounded-2xl bg-muted animate-pulse" />
+            <div className="h-12 w-48 rounded-lg bg-muted animate-pulse" />
           </div>
         ))}
       </div>
@@ -77,6 +88,13 @@ export function ConversationThread({
   const fetchMessages = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
+    if (isDemoVideoDataEnabled()) {
+      const rows = listDemoMessages(conversation.id);
+      setMessages(rows);
+      setCount(rows.length);
+      setIsLoading(false);
+      return;
+    }
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -125,6 +143,7 @@ export function ConversationThread({
       });
       return;
     }
+    const resolvedIdentityId = identityId;
 
     let cancelled = false;
     setIdentity({
@@ -134,6 +153,18 @@ export function ConversationThread({
     });
 
     async function loadIdentityContext() {
+      if (isDemoVideoDataEnabled()) {
+        const identity = getDemoIdentity(resolvedIdentityId);
+        const demoLead = conversation.lead_id
+          ? getDemoLead(conversation.lead_id)
+          : undefined;
+        setIdentity({
+          status: "ready",
+          externalAddress: identity?.externalAddress ?? null,
+          linkState: demoLead ? "linked" : "unmatched",
+        });
+        return;
+      }
       try {
         const identityUrl = `/api/v1/organizations/${organizationId}/channel-identities/${identityId}`;
         const leadUrl = conversation.lead_id
@@ -230,6 +261,11 @@ export function ConversationThread({
     const nextStatus = conversation.status === "open" ? "closed" : "open";
     setIsUpdatingStatus(true);
     setStatusError(null);
+    if (isDemoVideoDataEnabled()) {
+      onConversationUpdated({ ...conversation, status: nextStatus });
+      setIsUpdatingStatus(false);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/conversations/${conversation.id}`,
@@ -257,6 +293,24 @@ export function ConversationThread({
     if (isUpdatingAi) return;
     setIsUpdatingAi(true);
     setStatusError(null);
+    if (isDemoVideoDataEnabled()) {
+      if (path === "pause") {
+        onConversationUpdated({
+          ...conversation,
+          ai_paused_at: new Date().toISOString(),
+        });
+      } else if (path === "resume") {
+        onConversationUpdated({ ...conversation, ai_paused_at: null });
+      } else if (path === "escalate") {
+        onConversationUpdated({
+          ...conversation,
+          requires_human: true,
+          ai_paused_at: new Date().toISOString(),
+        });
+      }
+      setIsUpdatingAi(false);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/conversations/${conversation.id}/ai/${path}`,
@@ -307,7 +361,8 @@ export function ConversationThread({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <ConversationHeader
         conversation={conversation}
         isUpdating={isUpdatingStatus}
@@ -357,7 +412,7 @@ export function ConversationThread({
               className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}
               aria-hidden="true"
             >
-              <div className="h-12 w-48 rounded-2xl bg-muted animate-pulse" />
+              <div className="h-12 w-48 rounded-lg bg-muted animate-pulse" />
             </div>
           ))}
         </div>
@@ -445,6 +500,30 @@ export function ConversationThread({
           onListRefresh();
         }}
       />
+    </div>
+    <aside className="hidden xl:flex w-64 shrink-0 flex-col border-l border-border px-4 py-4">
+      <p className="text-xs font-medium text-muted-foreground">Customer</p>
+      {conversation.lead?.company_name ? (
+        <p className="mt-2 text-sm text-foreground">
+          {conversation.lead.company_name}
+        </p>
+      ) : null}
+      <dl className="mt-5 space-y-3 text-sm">
+        <div>
+          <dt className="text-xs text-muted-foreground">Channel</dt>
+          <dd className="mt-0.5">{CONVERSATION_CHANNEL_LABELS[conversation.channel]}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Status</dt>
+          <dd className="mt-0.5">{CONVERSATION_STATUS_LABELS[conversation.status]}</dd>
+        </div>
+      </dl>
+      {conversation.lead ? (
+        <Button variant="outline" size="sm" className="mt-6 w-full" asChild>
+          <Link href={`/dashboard/leads/${conversation.lead.id}`}>View lead</Link>
+        </Button>
+      ) : null}
+    </aside>
     </div>
   );
 }

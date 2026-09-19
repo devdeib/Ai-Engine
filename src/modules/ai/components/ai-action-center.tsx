@@ -10,6 +10,8 @@ import type {
   ActionCenterRecommendationItem,
   AiActionCenter as AiActionCenterData,
 } from "@/modules/ai/action-center/types";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import { DEMO_ACTION_CENTER } from "@/modules/dashboard/demo-catalog";
 
 export interface AiActionCenterProps {
   organizationId: string;
@@ -46,6 +48,11 @@ export function AiActionCenter({ organizationId }: AiActionCenterProps) {
   const fetchCenter = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    if (isDemoVideoDataEnabled()) {
+      setData(DEMO_ACTION_CENTER);
+      setIsLoading(false);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/ai/action-center`,
@@ -85,15 +92,7 @@ export function AiActionCenter({ organizationId }: AiActionCenterProps) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            AI Action Center
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Discover AI-related work across the organization, then open the
-            conversation to take the existing human action.
-          </p>
-        </div>
+        <h2 className="text-sm font-semibold tracking-tight">AI Action Center</h2>
         <Button
           type="button"
           variant="outline"

@@ -508,7 +508,7 @@ describe("LeadDetailClient — qualification fact edits", () => {
     await screen.findByRole("heading", { name: "Ahmed Ali" });
 
     expect(screen.getByText("Qualification")).toBeInTheDocument();
-    expect(screen.getByText("Not started")).toBeInTheDocument();
+    expect(screen.getAllByText("Not started").length).toBeGreaterThan(0);
     expect(screen.getByText("None collected")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /edit facts/i })
@@ -528,7 +528,7 @@ describe("LeadDetailClient — qualification fact edits", () => {
     await screen.findByRole("heading", { name: "Ahmed Ali" });
 
     expect(screen.getAllByText("Qualified").length).toBeGreaterThan(0);
-    expect(screen.getByText("Not started")).toBeInTheDocument();
+    expect(screen.getAllByText("Not started").length).toBeGreaterThan(0);
     expect(screen.getByText("None collected")).toBeInTheDocument();
   });
 
@@ -630,7 +630,7 @@ describe("LeadDetailClient — qualification fact edits", () => {
     expect(
       screen.queryByRole("button", { name: /save qualification/i })
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Qualifying")).toBeInTheDocument();
+    expect(screen.getAllByText("Qualifying").length).toBeGreaterThan(0);
   });
 
   it("keeps edit mode when save fails", async () => {

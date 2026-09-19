@@ -12,6 +12,11 @@ import {
 } from "@/modules/conversations/components/conversation-thread";
 import { CreateConversationForm } from "@/modules/conversations/components/create-conversation-form";
 import { cn } from "@/lib/utils";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import {
+  DEMO_CONVERSATIONS,
+  getDemoConversation,
+} from "@/modules/dashboard/demo-catalog";
 
 interface ConversationsMeta {
   page: number;
@@ -48,6 +53,16 @@ export function ConversationsClient({ organizationId }: ConversationsClientProps
   const fetchConversations = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
+    if (isDemoVideoDataEnabled()) {
+      setConversations(DEMO_CONVERSATIONS);
+      setMeta({
+        page: currentPage,
+        limit: 20,
+        count: DEMO_CONVERSATIONS.length,
+      });
+      setIsLoading(false);
+      return;
+    }
     try {
       const params = new URLSearchParams({
         page: String(currentPage),
@@ -92,8 +107,16 @@ export function ConversationsClient({ organizationId }: ConversationsClientProps
       return;
     }
 
+    const conversationId = selectedId;
     let cancelled = false;
     async function loadDetail() {
+      if (isDemoVideoDataEnabled()) {
+        const demo = getDemoConversation(conversationId);
+        setDetail(demo ?? null);
+        setDetailError(demo ? null : "not-found");
+        setIsLoadingDetail(false);
+        return;
+      }
       setIsLoadingDetail(true);
       setDetailError(null);
       try {
@@ -171,14 +194,8 @@ export function ConversationsClient({ organizationId }: ConversationsClientProps
   const threadOpen = Boolean(selectedId);
 
   return (
-    <div className="-m-4 lg:-m-6 flex h-[calc(100dvh-3.5rem)] min-h-[480px] flex-col">
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Conversations</h1>
-          <p className="text-xs text-muted-foreground hidden sm:block">
-            In-app threads with your leads.
-          </p>
-        </div>
+    <div className="-m-4 lg:-m-8 flex h-[calc(100dvh-3.5rem)] min-h-[480px] flex-col">
+      <div className="flex items-center justify-end gap-3 border-b border-border px-4 py-3">
         <Button onClick={() => setShowForm(true)} disabled={showForm} size="sm">
           <Plus className="h-4 w-4" />
           Start Conversation
@@ -195,7 +212,7 @@ export function ConversationsClient({ organizationId }: ConversationsClientProps
             if (e.target === e.currentTarget) setShowForm(false);
           }}
         >
-          <div className="w-full sm:max-w-lg max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl bg-background shadow-xl">
+          <div className="w-full sm:max-w-lg max-h-[90dvh] overflow-y-auto rounded-t-xl sm:rounded-lg bg-card border border-border">
             <CreateConversationForm
               organizationId={organizationId}
               onSuccess={handleCreated}
@@ -208,7 +225,7 @@ export function ConversationsClient({ organizationId }: ConversationsClientProps
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
-            "w-full md:w-80 lg:w-96 shrink-0 border-r bg-background",
+            "w-full md:w-80 lg:w-96 shrink-0 border-r border-border bg-background",
             threadOpen ? "hidden md:flex md:flex-col" : "flex flex-col"
           )}
         >
@@ -262,7 +279,7 @@ export function ConversationsClient({ organizationId }: ConversationsClientProps
             <ConversationThreadSkeleton />
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl border bg-muted">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-card">
                 <MessageSquare className="h-7 w-7 text-muted-foreground" />
               </div>
               <p className="font-medium">Select a conversation</p>

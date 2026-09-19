@@ -5,101 +5,53 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  Building2,
   MessageSquare,
+  Activity,
   Radio,
   Smartphone,
   Clock,
   CalendarDays,
-  Bot,
-  BarChart3,
+  Zap,
   Settings,
+  Building2,
+  BarChart3,
   LogOut,
   Menu,
   X,
-  ChevronDown,
   Building,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/utils";
 import { signOutAction } from "@/modules/auth/actions";
+import { ZeusLogo } from "@/components/brand/zeus-logo";
+import { getDashboardPageMeta } from "@/components/dashboard/page-meta";
 import type { Profile, OrganizationWithRole } from "@/lib/db/types";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import { DEMO_WORKSPACE } from "@/modules/dashboard/demo-catalog";
 
 interface NavItem {
   label: string;
   href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  implemented: boolean;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
 }
 
-const navItems: NavItem[] = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    implemented: true,
-  },
-  {
-    label: "Leads",
-    href: "/dashboard/leads",
-    icon: Users,
-    implemented: true,
-  },
-  {
-    label: "Properties",
-    href: "/dashboard/properties",
-    icon: Building2,
-    implemented: false,
-  },
-  {
-    label: "Conversations",
-    href: "/dashboard/conversations",
-    icon: MessageSquare,
-    implemented: true,
-  },
-  {
-    label: "Channels",
-    href: "/dashboard/channels",
-    icon: Radio,
-    implemented: true,
-  },
-  {
-    label: "Channel Identities",
-    href: "/dashboard/identities",
-    icon: Smartphone,
-    implemented: true,
-  },
-  {
-    label: "Follow-ups",
-    href: "/dashboard/follow-ups",
-    icon: Clock,
-    implemented: true,
-  },
-  {
-    label: "Appointments",
-    href: "/dashboard/appointments",
-    icon: CalendarDays,
-    implemented: true,
-  },
-  {
-    label: "AI Agent",
-    href: "/dashboard/ai-agent",
-    icon: Bot,
-    implemented: true,
-  },
-  {
-    label: "Analytics",
-    href: "/dashboard/analytics",
-    icon: BarChart3,
-    implemented: false,
-  },
-  {
-    label: "Settings",
-    href: "/dashboard/settings",
-    icon: Settings,
-    implemented: true,
-  },
+const mainNav: NavItem[] = [
+  { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Leads", href: "/dashboard/leads", icon: Users },
+  { label: "Conversations", href: "/dashboard/conversations", icon: MessageSquare },
+  { label: "Activity", href: "/dashboard/activity", icon: Activity },
+];
+
+const workspaceNav: NavItem[] = [
+  { label: "Follow-ups", href: "/dashboard/follow-ups", icon: Clock },
+  { label: "Appointments", href: "/dashboard/appointments", icon: CalendarDays },
+  { label: "Channels", href: "/dashboard/channels", icon: Radio },
+  { label: "Channel Identities", href: "/dashboard/identities", icon: Smartphone },
+  { label: "AI Agent", href: "/dashboard/ai-agent", icon: Zap },
+  { label: "Properties", href: "/dashboard/properties", icon: Building2 },
+  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 interface DashboardShellProps {
@@ -117,71 +69,89 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const page = getDashboardPageMeta(pathname);
+  const displayProfile = isDemoVideoDataEnabled()
+    ? { ...profile, display_name: DEMO_WORKSPACE.ownerName }
+    : profile;
+  const displayOrganization =
+    isDemoVideoDataEnabled() && currentOrganization
+      ? {
+          ...currentOrganization,
+          name: DEMO_WORKSPACE.organizationName,
+          slug: DEMO_WORKSPACE.slug,
+        }
+      : currentOrganization;
 
   return (
     <div className="flex min-h-[100dvh] bg-background">
-      {/* Sidebar — desktop */}
-      <aside className="hidden lg:flex w-60 flex-col fixed inset-y-0 left-0 bg-sidebar border-r border-sidebar-border">
+      <aside className="hidden lg:flex w-[232px] flex-col fixed inset-y-0 left-0 bg-sidebar border-r border-sidebar-border">
         <SidebarContent
           pathname={pathname}
-          profile={profile}
-          organizations={organizations}
-          currentOrganization={currentOrganization}
+          profile={displayProfile}
+          currentOrganization={displayOrganization}
         />
       </aside>
 
-      {/* Sidebar — mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-zeus-black/70"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="relative flex w-60 h-full flex-col bg-sidebar">
+          <aside className="relative flex w-[232px] h-full flex-col bg-sidebar border-r border-sidebar-border">
             <button
               onClick={() => setMobileOpen(false)}
-              className="absolute top-3 right-3 text-sidebar-foreground/60 hover:text-sidebar-foreground"
+              className="absolute top-3 right-3 text-sidebar-foreground/50 hover:text-zeus-blue"
               aria-label="Close menu"
             >
               <X className="h-5 w-5" />
             </button>
             <SidebarContent
               pathname={pathname}
-              profile={profile}
-              organizations={organizations}
-              currentOrganization={currentOrganization}
+              profile={displayProfile}
+              currentOrganization={displayOrganization}
             />
           </aside>
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex flex-col flex-1 lg:pl-60">
-        {/* Top bar */}
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4 lg:px-6">
+      <div className="flex flex-col flex-1 lg:pl-[232px]">
+        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-border bg-background px-4 lg:px-8">
           <button
             onClick={() => setMobileOpen(true)}
-            className="lg:hidden text-muted-foreground hover:text-foreground"
+            className="lg:hidden text-muted-foreground hover:text-zeus-blue"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
           </button>
 
-          <div className="flex-1" />
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+              {page.title}
+            </h1>
+            {page.description ? (
+              <p className="hidden truncate text-xs text-muted-foreground sm:block">
+                {page.description}
+              </p>
+            ) : null}
+          </div>
 
-          <div className="flex items-center gap-2">
-            {currentOrganization && (
-              <span className="text-sm text-muted-foreground hidden sm:inline">
-                {currentOrganization.name}
+          <div className="flex items-center gap-3">
+            {displayOrganization && (
+              <span className="hidden text-xs text-muted-foreground sm:inline">
+                {displayOrganization.name}
               </span>
             )}
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
-              {getInitials(profile.display_name)}
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-md bg-zeus-blue/12 text-[11px] font-semibold text-zeus-black"
+              title={displayProfile.display_name}
+            >
+              {getInitials(displayProfile.display_name)}
             </div>
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6">{children}</main>
+        <main className="flex-1 p-4 lg:p-8">{children}</main>
       </div>
     </div>
   );
@@ -190,90 +160,42 @@ export function DashboardShell({
 function SidebarContent({
   pathname,
   profile,
-  organizations,
   currentOrganization,
 }: {
   pathname: string;
   profile: Profile;
-  organizations: OrganizationWithRole[];
   currentOrganization: OrganizationWithRole | null;
 }) {
   return (
     <>
-      {/* Logo */}
-      <div className="flex h-14 items-center gap-3 px-4 border-b border-sidebar-border">
-        <div className="flex h-7 w-7 items-center justify-center rounded bg-sidebar-primary">
-          <span className="text-xs font-bold text-sidebar-primary-foreground">
-            VG
-          </span>
-        </div>
-        <span className="text-sm font-semibold text-sidebar-foreground">
-          AI Sales Engine
-        </span>
+      <div className="flex h-14 items-center px-4 border-b border-sidebar-border">
+        <ZeusLogo />
       </div>
 
-      {/* Organization context */}
       {currentOrganization && (
-        <div className="px-3 pt-3 pb-1">
-          <div className="flex items-center gap-2 rounded-md px-2 py-1.5 bg-sidebar-accent">
-            <Building className="h-3.5 w-3.5 text-sidebar-accent-foreground/70 shrink-0" />
+        <div className="px-3 pt-4 pb-1">
+          <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
+            <Building className="h-3.5 w-3.5 text-sidebar-foreground/40 shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-sidebar-accent-foreground truncate">
+              <p className="text-xs font-medium text-sidebar-foreground truncate">
                 {currentOrganization.name}
               </p>
-              <p className="text-[10px] text-sidebar-accent-foreground/60 capitalize">
+              <p className="text-[10px] text-sidebar-foreground/45 capitalize">
                 {currentOrganization.role}
               </p>
             </div>
-            {organizations.length > 1 && (
-              <ChevronDown className="h-3 w-3 text-sidebar-accent-foreground/50 shrink-0" />
-            )}
           </div>
         </div>
       )}
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
-        {navItems.map((item) => {
-          const isActive =
-            item.href === "/dashboard"
-              ? pathname === "/dashboard"
-              : pathname.startsWith(item.href);
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "group flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors",
-                isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                !item.implemented &&
-                  !isActive &&
-                  "opacity-60 cursor-default pointer-events-none"
-              )}
-              aria-disabled={!item.implemented}
-              title={
-                !item.implemented ? `${item.label} — coming soon` : item.label
-              }
-            >
-              <item.icon className="h-4 w-4 shrink-0" />
-              <span className="flex-1">{item.label}</span>
-              {!item.implemented && (
-                <span className="text-[9px] font-mono uppercase tracking-wide opacity-50">
-                  soon
-                </span>
-              )}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 overflow-y-auto px-3 py-3">
+        <NavSection title="Main" items={mainNav} pathname={pathname} />
+        <NavSection title="Workspace" items={workspaceNav} pathname={pathname} />
       </nav>
 
-      {/* User section */}
       <div className="border-t border-sidebar-border px-3 py-3">
         <div className="flex items-center gap-3 mb-2 px-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-sidebar-accent text-sidebar-accent-foreground text-xs font-semibold shrink-0">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-sidebar-accent text-sidebar-accent-foreground text-[11px] font-semibold shrink-0">
             {getInitials(profile.display_name)}
           </div>
           <div className="flex-1 min-w-0">
@@ -285,13 +207,66 @@ function SidebarContent({
         <form action={signOutAction}>
           <button
             type="submit"
-            className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+            className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground/55 hover:bg-zeus-blue/10 hover:text-zeus-blue transition-colors"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             Sign out
           </button>
         </form>
+        <p className="mt-3 px-2 text-[10px] tracking-wide text-sidebar-foreground/30">
+          ZEUS by Virtual Gravity
+        </p>
       </div>
     </>
+  );
+}
+
+function NavSection({
+  title,
+  items,
+  pathname,
+}: {
+  title: string;
+  items: NavItem[];
+  pathname: string;
+}) {
+  return (
+    <div className="mb-5">
+      <p className="px-2 mb-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase text-sidebar-foreground/35">
+        {title}
+      </p>
+      <div className="space-y-0.5">
+        {items.map((item) => {
+          const isActive =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname.startsWith(item.href);
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors",
+                isActive
+                  ? "text-zeus-blue font-medium"
+                  : "text-sidebar-foreground/60 hover:bg-zeus-blue/10 hover:text-zeus-blue"
+              )}
+            >
+              <item.icon
+                className={cn(
+                  "h-4 w-4 shrink-0",
+                  isActive
+                    ? "text-zeus-blue"
+                    : "text-sidebar-foreground/45 group-hover:text-zeus-blue"
+                )}
+                strokeWidth={1.75}
+              />
+              <span className="flex-1">{item.label}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
   );
 }

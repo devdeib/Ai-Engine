@@ -22,6 +22,11 @@ import {
   emptyOrganizationSalesProfile,
   type OrganizationSalesProfilePublic,
 } from "@/modules/organizations/sales-profile-schema";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import {
+  DEMO_SALES_PROFILE,
+  DEMO_WORKSPACE,
+} from "@/modules/dashboard/demo-catalog";
 
 const textareaClass = cn(
   "flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2",
@@ -87,6 +92,13 @@ export function OrganizationSettingsForm({
   const loadProfile = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
+    if (isDemoVideoDataEnabled()) {
+      setFields(
+        profileToFields(DEMO_WORKSPACE.organizationName, DEMO_SALES_PROFILE)
+      );
+      setIsLoading(false);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/sales-profile`,
@@ -121,6 +133,12 @@ export function OrganizationSettingsForm({
     setSaveError(null);
     setSuccess(null);
     setFieldErrors({});
+
+    if (isDemoVideoDataEnabled()) {
+      setSuccess("Workspace settings saved.");
+      setIsSaving(false);
+      return;
+    }
 
     try {
       const nameRes = await fetch(

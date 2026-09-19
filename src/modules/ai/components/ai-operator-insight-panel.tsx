@@ -23,6 +23,11 @@ import {
   APPOINTMENT_LOCATION_MAX,
   APPOINTMENT_NOTES_MAX,
 } from "@/modules/appointments/schema";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import {
+  DEMO_INSIGHTS,
+  getDemoConversationForLead,
+} from "@/modules/dashboard/demo-catalog";
 
 export interface AiOperatorInsightPanelProps {
   organizationId: string;
@@ -71,6 +76,16 @@ export function AiOperatorInsightPanel({
   const fetchInsight = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    if (isDemoVideoDataEnabled()) {
+      const conversation =
+        conversationId ?? getDemoConversationForLead(leadId ?? "")?.id ?? null;
+      setResolvedConversationId(conversation);
+      const insight = conversation ? DEMO_INSIGHTS[conversation] : undefined;
+      setAnalysis(insight?.analysis ?? null);
+      setRecommendation(insight?.recommendation ?? null);
+      setIsLoading(false);
+      return;
+    }
     try {
       let conversation = conversationId ?? null;
       if (!conversation && leadId) {

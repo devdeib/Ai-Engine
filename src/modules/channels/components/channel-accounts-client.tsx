@@ -15,6 +15,8 @@ import { env } from "@/lib/env";
 import { cn, formatDate } from "@/lib/utils";
 import type { MemberRole } from "@/lib/db/types";
 import { buildChannelWebhookUrl } from "@/modules/channels/webhook-url";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import { DEMO_CHANNEL_ACCOUNTS } from "@/modules/dashboard/demo-catalog";
 
 const PAGE_SIZE = 20;
 
@@ -45,9 +47,9 @@ const STATUS_LABELS: Record<AccountStatus, string> = {
 };
 
 const STATUS_CLASSES: Record<AccountStatus, string> = {
-  active: "bg-green-50 text-green-700 ring-green-600/20",
-  paused: "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-  disabled: "bg-gray-100 text-gray-600 ring-gray-500/20",
+  active: "bg-zeus-blue/12 text-zeus-blue",
+  paused: "bg-zeus-black/[0.06] text-zeus-black/75",
+  disabled: "bg-zeus-black/[0.04] text-muted-foreground",
 };
 
 const STATUS_ACTIONS: { status: AccountStatus; label: string }[] = [
@@ -303,6 +305,16 @@ export function ChannelAccountsClient({
   const fetchAccounts = useCallback(async () => {
     setIsLoadingList(true);
     setListError(null);
+    if (isDemoVideoDataEnabled()) {
+      setAccounts(DEMO_CHANNEL_ACCOUNTS);
+      setMeta({
+        page,
+        limit: PAGE_SIZE,
+        count: DEMO_CHANNEL_ACCOUNTS.length,
+      });
+      setIsLoadingList(false);
+      return;
+    }
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -528,13 +540,7 @@ export function ChannelAccountsClient({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Channels</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Operate channel accounts for inbound and outbound messaging.
-          </p>
-        </div>
+      <div className="flex flex-wrap items-start justify-end gap-3">
         {canMutate && (
           <Button
             onClick={() => {
@@ -551,7 +557,7 @@ export function ChannelAccountsClient({
 
       {oneTimeSecret && (
         <section
-          className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-4 space-y-3"
+          className="rounded-lg border border-amber-400/25 bg-amber-500/10 px-4 py-4 space-y-3"
           data-testid="one-time-secret-panel"
         >
           <div>

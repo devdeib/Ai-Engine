@@ -12,9 +12,9 @@ export const APPOINTMENT_STATUS_LABELS: Record<AppointmentStatus, string> = {
 };
 
 export const APPOINTMENT_STATUS_CLASSES: Record<AppointmentStatus, string> = {
-  scheduled: "bg-blue-50 text-blue-700 ring-blue-600/20",
-  completed: "bg-green-50 text-green-700 ring-green-600/20",
-  cancelled: "bg-gray-100 text-gray-600 ring-gray-500/20",
+  scheduled: "bg-zeus-blue/12 text-zeus-blue",
+  completed: "bg-zeus-black/[0.06] text-zeus-black/75",
+  cancelled: "bg-zeus-black/[0.04] text-muted-foreground",
 };
 
 export const APPOINTMENT_QUEUE_LABELS = {

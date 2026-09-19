@@ -31,14 +31,14 @@ export function ConversationListItem({
         className={cn(
           "w-full text-left px-4 py-3 border-b last:border-b-0 transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-          selected ? "bg-primary/10" : "hover:bg-muted/40"
+          selected ? "bg-zeus-blue/8" : "hover:bg-zeus-blue/10"
         )}
       >
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium text-sm truncate">{name}</p>
           <span
             className={cn(
-              "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+              "inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
               CONVERSATION_STATUS_CLASSES[conversation.status]
             )}
           >

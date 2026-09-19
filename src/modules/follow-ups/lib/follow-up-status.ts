@@ -12,9 +12,9 @@ export const FOLLOW_UP_STATUS_LABELS: Record<LeadFollowUpStatus, string> = {
 };
 
 export const FOLLOW_UP_STATUS_CLASSES: Record<LeadFollowUpStatus, string> = {
-  pending: "bg-blue-50 text-blue-700 ring-blue-600/20",
-  completed: "bg-green-50 text-green-700 ring-green-600/20",
-  cancelled: "bg-gray-100 text-gray-600 ring-gray-500/20",
+  pending: "bg-zeus-blue/12 text-zeus-blue",
+  completed: "bg-zeus-black/[0.06] text-zeus-black/75",
+  cancelled: "bg-zeus-black/[0.04] text-muted-foreground",
 };
 
 export function isFollowUpOverdue(

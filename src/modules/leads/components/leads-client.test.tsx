@@ -490,7 +490,7 @@ describe("LeadsClient — pagination", () => {
     );
 
     render(<LeadsClient organizationId={ORG_A} />);
-    await screen.findByRole("columnheader", { name: "Name" });
+    await screen.findByRole("columnheader", { name: "Lead" });
 
     expect(screen.getByRole("button", { name: /next/i })).not.toBeDisabled();
   });
@@ -511,7 +511,7 @@ describe("LeadsClient — pagination", () => {
     );
 
     render(<LeadsClient organizationId={ORG_A} />);
-    await screen.findByRole("columnheader", { name: "Name" });
+    await screen.findByRole("columnheader", { name: "Lead" });
 
     await user.click(screen.getByRole("button", { name: /next/i }));
 

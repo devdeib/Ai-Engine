@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/auth/login-form";
+import { isPublicSignupEnabled } from "@/modules/auth/public-signup";
 
 export const metadata: Metadata = {
   title: "Sign In",
 };
+
+export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
   return (
@@ -15,15 +18,17 @@ export default function LoginPage() {
         </p>
       </div>
       <LoginForm />
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        Don&apos;t have an account?{" "}
-        <a
-          href="/sign-up"
-          className="font-medium text-primary hover:underline underline-offset-4"
-        >
-          Create one
-        </a>
-      </p>
+      {isPublicSignupEnabled() ? (
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{" "}
+          <a
+            href="/sign-up"
+            className="font-medium text-primary hover:text-zeus-blue hover:underline underline-offset-4"
+          >
+            Create one
+          </a>
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -20,6 +20,11 @@ import {
   type AppointmentQueueBucket,
 } from "@/modules/appointments/lib/appointment-labels";
 import { AppointmentItem } from "@/modules/appointments/components/appointment-item";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import {
+  DEMO_MEMBERS,
+  listDemoAppointments,
+} from "@/modules/dashboard/demo-catalog";
 
 type QueueTab = "scheduled" | "completed" | "cancelled" | "all";
 
@@ -54,6 +59,10 @@ export function AppointmentsQueueClient({
   const [updateError, setUpdateError] = useState<string | null>(null);
 
   const fetchMembers = useCallback(async () => {
+    if (isDemoVideoDataEnabled()) {
+      setMembers(DEMO_MEMBERS);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/members`,
@@ -81,6 +90,13 @@ export function AppointmentsQueueClient({
   const fetchAppointments = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
+    if (isDemoVideoDataEnabled()) {
+      const rows = listDemoAppointments({ status: tab });
+      setAppointments(rows);
+      setMeta({ page, limit: 20, count: rows.length });
+      setIsLoading(false);
+      return;
+    }
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -137,6 +153,15 @@ export function AppointmentsQueueClient({
   ) => {
     setUpdatingId(appointmentId);
     setUpdateError(null);
+    if (isDemoVideoDataEnabled()) {
+      setAppointments((current) =>
+        current.map((item) =>
+          item.id === appointmentId ? { ...item, status } : item
+        )
+      );
+      setUpdatingId(null);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/appointments/${appointmentId}`,
@@ -171,13 +196,6 @@ export function AppointmentsQueueClient({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Appointments</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Scheduled meetings and viewings across your pipeline.
-        </p>
-      </div>
-
       <div
         className="flex flex-wrap gap-1.5"
         role="tablist"
@@ -193,7 +211,7 @@ export function AppointmentsQueueClient({
               "rounded-md px-3 py-1.5 text-sm transition-colors",
               tab === item.id
                 ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted"
+                : "text-muted-foreground hover:bg-zeus-blue/10 hover:text-zeus-blue"
             )}
             onClick={() => {
               setTab(item.id);
@@ -347,7 +365,7 @@ function QueueItem({
         Lead:{" "}
         <Link
           href={`/dashboard/leads/${appointment.lead_id}`}
-          className="underline-offset-2 hover:underline"
+          className="underline-offset-2 hover:text-zeus-blue hover:underline"
         >
           {leadDisplayName(appointment.lead)}
         </Link>

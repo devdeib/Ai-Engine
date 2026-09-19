@@ -32,6 +32,37 @@ const organization: OrganizationWithRole = {
 };
 
 describe("DashboardShell navigation", () => {
+  it("brands the product as ZEUS", () => {
+    render(
+      <DashboardShell
+        profile={profile}
+        organizations={[organization]}
+        currentOrganization={organization}
+      >
+        <div>content</div>
+      </DashboardShell>
+    );
+
+    expect(screen.getAllByText("ZEUS").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AI SALES AGENT").length).toBeGreaterThan(0);
+  });
+
+  it("includes Overview, Leads, Conversations, and Activity", () => {
+    render(
+      <DashboardShell
+        profile={profile}
+        organizations={[organization]}
+        currentOrganization={organization}
+      >
+        <div>content</div>
+      </DashboardShell>
+    );
+
+    expect(screen.getAllByRole("link", { name: "Overview" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Leads" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Conversations" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Activity" }).length).toBeGreaterThan(0);
+  });
   it("includes a Channels item pointing at /dashboard/channels", () => {
     render(
       <DashboardShell

@@ -11,6 +11,12 @@ import { Button } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
 import { LEAD_STATUS_LABELS } from "@/modules/leads/lib/lead-labels";
 import type { LeadStatus } from "@/lib/db/types";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import {
+  DEMO_CHANNEL_ACCOUNTS,
+  DEMO_IDENTITY_CANDIDATES,
+  DEMO_UNMATCHED_IDENTITIES,
+} from "@/modules/dashboard/demo-catalog";
 
 const PAGE_SIZE = 20;
 
@@ -131,6 +137,14 @@ export function IdentityMatchingClient({
   );
 
   const fetchAccounts = useCallback(async () => {
+    if (isDemoVideoDataEnabled()) {
+      const next: Record<string, ChannelAccountPublic> = {};
+      for (const account of DEMO_CHANNEL_ACCOUNTS) {
+        next[account.id] = { id: account.id, channel: account.channel };
+      }
+      setAccountsById(next);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/channel-accounts?page=1&limit=100`,
@@ -151,6 +165,16 @@ export function IdentityMatchingClient({
   const fetchIdentities = useCallback(async () => {
     setIsLoadingList(true);
     setListError(null);
+    if (isDemoVideoDataEnabled()) {
+      setIdentities(DEMO_UNMATCHED_IDENTITIES);
+      setIdentityMeta({
+        page: identityPage,
+        limit: PAGE_SIZE,
+        count: DEMO_UNMATCHED_IDENTITIES.length,
+      });
+      setIsLoadingList(false);
+      return;
+    }
     try {
       const params = new URLSearchParams({
         unmatched: "true",
@@ -192,6 +216,13 @@ export function IdentityMatchingClient({
     async (channelIdentityId: string, page: number) => {
       setIsLoadingCandidates(true);
       setCandidateError(null);
+      if (isDemoVideoDataEnabled()) {
+        const rows = DEMO_IDENTITY_CANDIDATES[channelIdentityId] ?? [];
+        setCandidates(rows);
+        setCandidateMeta({ page, limit: PAGE_SIZE, count: rows.length });
+        setIsLoadingCandidates(false);
+        return;
+      }
       try {
         const params = new URLSearchParams({
           page: String(page),
@@ -243,6 +274,17 @@ export function IdentityMatchingClient({
     if (!selectedIdentity || !selectedCandidate || isAttaching) return;
     setIsAttaching(true);
     setAttachError(null);
+    if (isDemoVideoDataEnabled()) {
+      setLinkedLead(selectedCandidate);
+      setIdentities((current) =>
+        current.filter((identity) => identity.id !== selectedIdentity.id)
+      );
+      setSelectedId(null);
+      setSelectedCandidateId(null);
+      setCandidates([]);
+      setIsAttaching(false);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/channel-identities/${selectedIdentity.id}`,
@@ -280,15 +322,6 @@ export function IdentityMatchingClient({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Channel Identities
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Match inbound channel identities to existing CRM leads. Attachment
-          does not delete stub leads.
-        </p>
-      </div>
 
       {linkedLead && (
         <div
@@ -364,7 +397,7 @@ export function IdentityMatchingClient({
                         "w-full rounded-md border bg-card px-3 py-3 text-left transition-colors",
                         selected
                           ? "border-primary ring-1 ring-primary"
-                          : "hover:bg-muted/40"
+                          : "hover:bg-zeus-blue/10"
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -492,7 +525,7 @@ export function IdentityMatchingClient({
                               "w-full rounded-md border bg-card px-3 py-3 text-left transition-colors",
                               selected
                                 ? "border-primary ring-1 ring-primary"
-                                : "hover:bg-muted/40"
+                                : "hover:bg-zeus-blue/10"
                             )}
                           >
                             <p className="text-sm font-medium">

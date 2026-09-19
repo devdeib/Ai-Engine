@@ -45,11 +45,11 @@ export function ConversationAiControls({
     <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 sm:px-4">
       <span
         className={cn(
-          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
-          state === "active" && "bg-indigo-50 text-indigo-700 ring-indigo-600/20",
-          state === "paused" && "bg-amber-50 text-amber-800 ring-amber-600/20",
-          state === "requires_human" && "bg-rose-50 text-rose-700 ring-rose-600/20",
-          state === "closed" && "bg-muted text-muted-foreground ring-border"
+          "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium",
+          state === "active" && "bg-zeus-blue/12 text-zeus-blue",
+          state === "paused" && "bg-zeus-black/[0.06] text-zeus-black/75",
+          state === "requires_human" && "bg-destructive/10 text-red-700",
+          state === "closed" && "bg-zeus-black/[0.04] text-muted-foreground"
         )}
       >
         <Bot className="h-3 w-3" aria-hidden="true" />

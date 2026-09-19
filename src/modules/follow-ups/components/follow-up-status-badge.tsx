@@ -20,14 +20,14 @@ export function FollowUpStatusBadge({
     <span className="inline-flex flex-wrap items-center gap-1.5">
       <span
         className={cn(
-          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
+          "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium",
           FOLLOW_UP_STATUS_CLASSES[status]
         )}
       >
         {FOLLOW_UP_STATUS_LABELS[status]}
       </span>
       {overdue && status === "pending" && (
-        <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/20">
+        <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-destructive/10 text-red-700">
           Overdue
         </span>
       )}

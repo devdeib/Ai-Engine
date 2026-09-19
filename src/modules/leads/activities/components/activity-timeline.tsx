@@ -22,7 +22,7 @@ import {
   TrendingUp,
   MessageSquare,
   Clock,
-  Bot,
+  Zap,
   Loader2,
   AlertCircle,
   RefreshCw,
@@ -42,6 +42,8 @@ import {
   ACTIVITY_TYPE_LABELS,
   MANUAL_ACTIVITY_TYPE_OPTIONS,
 } from "@/modules/leads/activities/lib/activity-labels";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import { listDemoActivities } from "@/modules/dashboard/demo-catalog";
 
 export { ACTIVITY_TYPE_LABELS };
 
@@ -57,20 +59,20 @@ const ACTIVITY_ICONS: Record<
   conversation: MessageSquare,
   follow_up: Clock,
   appointment: CalendarCheck,
-  ai: Bot,
+  ai: Zap,
 };
 
 /** Tailwind classes for the icon badge per activity type. */
 const ACTIVITY_ICON_BG: Record<LeadActivityType, string> = {
-  note: "bg-gray-100 text-gray-600",
-  call: "bg-blue-100 text-blue-600",
-  email: "bg-purple-100 text-purple-600",
-  meeting: "bg-green-100 text-green-600",
-  status_change: "bg-amber-100 text-amber-600",
-  conversation: "bg-sky-100 text-sky-700",
-  follow_up: "bg-orange-100 text-orange-700",
-  appointment: "bg-teal-100 text-teal-700",
-  ai: "bg-indigo-100 text-indigo-700",
+  note: "bg-zeus-black/[0.06] text-muted-foreground",
+  call: "bg-zeus-blue/12 text-zeus-blue",
+  email: "bg-zeus-black/[0.08] text-zeus-black/70",
+  meeting: "bg-zeus-black/[0.06] text-zeus-black/70",
+  status_change: "bg-zeus-blue/10 text-zeus-blue",
+  conversation: "bg-zeus-blue/12 text-zeus-blue",
+  follow_up: "bg-zeus-black/[0.07] text-zeus-black/70",
+  appointment: "bg-zeus-black/[0.06] text-zeus-black/70",
+  ai: "bg-zeus-blue/12 text-zeus-blue",
 };
 
 // ---------------------------------------------------------------------------
@@ -98,7 +100,7 @@ function ActivityItem({ activity }: { activity: LeadActivity }) {
     >
       <span
         className={cn(
-          "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+          "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
           ACTIVITY_ICON_BG[activity.type]
         )}
         aria-hidden="true"
@@ -136,7 +138,7 @@ function ActivitySkeleton() {
     <div className="space-y-4 animate-pulse" aria-hidden="true">
       {[0, 1, 2].map((i) => (
         <div key={i} className="flex gap-3">
-          <div className="mt-0.5 h-7 w-7 shrink-0 rounded-full bg-muted" />
+          <div className="mt-0.5 h-7 w-7 shrink-0 rounded-md bg-muted" />
           <div className="flex-1 space-y-1.5 pt-0.5">
             <div className="h-3 w-32 rounded bg-muted" />
             <div className="h-3 w-full rounded bg-muted" />
@@ -181,6 +183,11 @@ export function ActivityTimeline({
   const fetchActivities = useCallback(async () => {
     setIsLoadingActivities(true);
     setFetchError(null);
+    if (isDemoVideoDataEnabled()) {
+      setActivities(listDemoActivities(leadId));
+      setIsLoadingActivities(false);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/leads/${leadId}/activities?page=1&limit=20`,
@@ -252,7 +259,7 @@ export function ActivityTimeline({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        <CardTitle className="text-sm font-semibold">
           Activity
         </CardTitle>
       </CardHeader>

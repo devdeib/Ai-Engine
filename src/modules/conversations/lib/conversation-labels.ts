@@ -15,8 +15,8 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
 };
 
 export const CONVERSATION_STATUS_CLASSES: Record<ConversationStatus, string> = {
-  open: "bg-green-50 text-green-700 ring-green-600/20",
-  closed: "bg-gray-100 text-gray-600 ring-gray-500/20",
+  open: "bg-zeus-blue/12 text-zeus-blue",
+  closed: "bg-zeus-black/[0.05] text-muted-foreground",
 };
 
 export const CONVERSATION_CHANNEL_LABELS: Record<ConversationChannel, string> = {

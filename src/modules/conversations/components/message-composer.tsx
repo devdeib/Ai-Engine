@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { MESSAGE_BODY_MAX } from "@/modules/conversations/schema";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
 
 export interface MessageComposerProps {
   organizationId: string;
@@ -43,6 +44,12 @@ export function MessageComposer({
 
     setIsSubmitting(true);
     setError(null);
+    if (isDemoVideoDataEnabled()) {
+      setBody("");
+      onSent();
+      setIsSubmitting(false);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/conversations/${conversationId}/messages`,

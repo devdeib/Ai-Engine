@@ -1,11 +1,19 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { SignUpForm } from "@/components/auth/sign-up-form";
+import { isPublicSignupEnabled } from "@/modules/auth/public-signup";
 
 export const metadata: Metadata = {
   title: "Create Account",
 };
 
+export const dynamic = "force-dynamic";
+
 export default function SignUpPage() {
+  if (!isPublicSignupEnabled()) {
+    redirect("/login");
+  }
+
   return (
     <div>
       <div className="mb-6 text-center">
@@ -21,7 +29,7 @@ export default function SignUpPage() {
         Already have an account?{" "}
         <a
           href="/login"
-          className="font-medium text-primary hover:underline underline-offset-4"
+          className="font-medium text-primary hover:text-zeus-blue hover:underline underline-offset-4"
         >
           Sign in
         </a>

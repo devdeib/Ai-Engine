@@ -188,7 +188,7 @@ export function CreateLeadForm({
         <button
           type="button"
           onClick={onCancel}
-          className="text-muted-foreground hover:text-foreground transition-colors"
+          className="text-muted-foreground hover:text-zeus-blue transition-colors"
           aria-label="Close form"
           disabled={isSubmitting}
         >

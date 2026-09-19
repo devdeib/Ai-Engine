@@ -60,7 +60,7 @@ export function ConversationHeader({
           <h2 className="text-base font-semibold truncate">{name}</h2>
           <span
             className={cn(
-              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+              "inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
               CONVERSATION_STATUS_CLASSES[conversation.status]
             )}
           >
@@ -82,7 +82,7 @@ export function ConversationHeader({
               <span aria-hidden="true"> · </span>
               <Link
                 href={`/dashboard/leads/${conversation.lead.id}`}
-                className="hover:underline focus-visible:underline focus-visible:outline-none"
+                className="hover:text-zeus-blue hover:underline focus-visible:underline focus-visible:outline-none"
               >
                 View lead
               </Link>

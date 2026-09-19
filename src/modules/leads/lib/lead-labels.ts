@@ -3,6 +3,7 @@
  * Pure utilities — no React, no side effects.
  */
 import type { LeadSource, LeadStatus } from "@/lib/db/types";
+import type { QualificationStatus } from "@/modules/leads/qualification";
 
 export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
   website: "Website",
@@ -23,14 +24,20 @@ export const LEAD_STATUS_LABELS: Record<LeadStatus, string> = {
   converted: "Converted",
 };
 
-/** Tailwind classes for the status badge pill. */
+/** Tailwind classes for the status badge pill. Distinct per status. */
 export const LEAD_STATUS_CLASSES: Record<LeadStatus, string> = {
-  new: "bg-blue-50 text-blue-700 ring-blue-600/20",
-  contacted: "bg-yellow-50 text-yellow-700 ring-yellow-600/20",
-  qualified: "bg-green-50 text-green-700 ring-green-600/20",
-  unqualified: "bg-gray-100 text-gray-600 ring-gray-500/20",
-  lost: "bg-red-50 text-red-700 ring-red-600/20",
-  converted: "bg-purple-50 text-purple-700 ring-purple-600/20",
+  new: "bg-zeus-black/[0.04] text-muted-foreground",
+  contacted: "bg-zeus-black/[0.06] text-zeus-black/70",
+  qualified: "bg-zeus-blue/12 text-zeus-blue",
+  unqualified: "bg-zeus-black/[0.03] text-zeus-black/50",
+  lost: "bg-destructive/10 text-red-700",
+  converted: "bg-zeus-blue/18 text-zeus-black",
+};
+
+export const QUALIFICATION_STATUS_CLASSES: Record<QualificationStatus, string> = {
+  not_started: "bg-zeus-black/[0.04] text-muted-foreground",
+  qualifying: "bg-zeus-black/[0.06] text-zeus-black/75",
+  qualified: "bg-zeus-blue/12 text-zeus-blue",
 };
 
 /** Ordered source options for select menus. */

@@ -15,6 +15,11 @@ import {
   LEAD_SOURCE_OPTIONS,
 } from "@/modules/leads/lib/lead-labels";
 import type { Lead } from "@/lib/db/types";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import {
+  DEMO_MEMBERS,
+  listDemoLeads,
+} from "@/modules/dashboard/demo-catalog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,8 +45,8 @@ export interface LeadsClientProps {
 // ---------------------------------------------------------------------------
 
 const selectClass =
-  "h-9 rounded-md border border-input bg-background px-3 py-1 text-sm " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
+  "h-9 rounded-md border border-input bg-card px-3 py-1 text-sm " +
+  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring " +
   "cursor-pointer text-foreground";
 
 // ---------------------------------------------------------------------------
@@ -141,6 +146,10 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
   // ---------------------------------------------------------------------------
 
   const fetchMembers = useCallback(async () => {
+    if (isDemoVideoDataEnabled()) {
+      setMembers(DEMO_MEMBERS);
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/members`,
@@ -199,6 +208,20 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
   const fetchLeads = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
+    if (isDemoVideoDataEnabled()) {
+      const result = listDemoLeads({
+        search: currentSearch,
+        status: currentStatus,
+        source: currentSource,
+        ownerId: currentOwner,
+        page: currentPage,
+        limit: 20,
+      });
+      setLeads(result.data);
+      setMeta(result.meta);
+      setIsLoading(false);
+      return;
+    }
     try {
       const params = new URLSearchParams();
       params.set("page", String(currentPage));
@@ -288,15 +311,8 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
 
   return (
     <div className="space-y-4">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage your sales leads and track their progress.
-          </p>
-        </div>
-        <Button onClick={() => setShowForm(true)} disabled={showForm}>
+      <div className="flex items-center justify-end">
+        <Button onClick={() => setShowForm(true)} disabled={showForm} size="sm">
           <Plus className="h-4 w-4" />
           New Lead
         </Button>
@@ -369,7 +385,7 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
           ))}
         </select>
 
-        <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-foreground">
+        <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-card px-3 text-sm text-foreground">
           <input
             type="checkbox"
             checked={hideChannelStubs}
@@ -410,7 +426,7 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
             variant="ghost"
             size="sm"
             onClick={clearFilters}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-zeus-blue"
             aria-label="Clear all filters"
           >
             <X className="h-4 w-4 mr-1" />
@@ -430,7 +446,7 @@ export function LeadsClient({ organizationId }: LeadsClientProps) {
             if (e.target === e.currentTarget) setShowForm(false);
           }}
         >
-          <div className="w-full sm:max-w-lg max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:rounded-xl bg-background shadow-xl">
+          <div className="w-full sm:max-w-lg max-h-[90dvh] overflow-y-auto rounded-t-xl sm:rounded-lg bg-card border border-border">
             <CreateLeadForm
               organizationId={organizationId}
               onSuccess={handleLeadCreated}

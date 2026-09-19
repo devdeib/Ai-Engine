@@ -125,7 +125,7 @@ export function CreateConversationForm({
         <button
           type="button"
           onClick={onCancel}
-          className="text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-zeus-blue"
           aria-label="Close"
           disabled={isSubmitting}
         >

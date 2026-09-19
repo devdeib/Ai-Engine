@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/utils";
 import type { AiToolActionPublic } from "@/modules/ai/actions/schema";
 import { actionCenterConversationHref } from "@/modules/ai/action-center/constants";
+import { isDemoVideoDataEnabled } from "@/modules/dashboard/demo-mode";
+import { getDemoPendingActions } from "@/modules/dashboard/demo-catalog";
 
 export interface PendingAiActionsPanelProps {
   organizationId: string;
@@ -47,6 +49,15 @@ export function PendingAiActionsPanel({
   const fetchActions = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    if (isDemoVideoDataEnabled()) {
+      setActions(
+        getDemoPendingActions({ conversationId, leadId }).filter(
+          (action) => action.status === "pending"
+        )
+      );
+      setIsLoading(false);
+      return;
+    }
     try {
       const params = new URLSearchParams({
         page: "1",
@@ -76,6 +87,12 @@ export function PendingAiActionsPanel({
     if (busyId) return;
     setBusyId(actionId);
     setError(null);
+    if (isDemoVideoDataEnabled()) {
+      setActions((current) => current.filter((action) => action.id !== actionId));
+      setBusyId(null);
+      onDecision?.();
+      return;
+    }
     try {
       const res = await fetch(
         `/api/v1/organizations/${organizationId}/ai/actions/${actionId}/${decision}`,
@@ -146,7 +163,7 @@ export function PendingAiActionsPanel({
       {actions.map((action) => (
         <div
           key={action.id}
-          className="rounded-lg border bg-amber-50/60 px-3 py-3 sm:px-4"
+          className="rounded-lg border border-border bg-card px-3 py-3 sm:px-4"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">

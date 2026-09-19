@@ -210,12 +210,20 @@ describe("LeadTable — populated state", () => {
         onNewLead={noop}
       />
     );
-    expect(screen.getByText("Name")).toBeInTheDocument();
-    expect(screen.getByText("Status")).toBeInTheDocument();
+    expect(screen.getByText("Lead")).toBeInTheDocument();
+    expect(screen.getByText("Qualification")).toBeInTheDocument();
+    expect(screen.getByText("Interest")).toBeInTheDocument();
   });
 
-  it("displays the status badge with the correct label", () => {
-    const lead = makeLead({ status: "qualified" });
+  it("displays the qualification badge with the correct label", () => {
+    const lead = makeLead({
+      email: "ahmed@example.com",
+      qualification_facts: {
+        budget: "AED 1.5M",
+        timeline: "3 months",
+        location: "Dubai Marina",
+      },
+    });
     render(
       <LeadTable
         leads={[lead]}
@@ -311,8 +319,8 @@ describe("LeadTable — nullable field safety", () => {
     ).not.toThrow();
   });
 
-  it("shows 'Not scored' when score is null", () => {
-    const lead = makeLead({ score: null });
+  it("shows Not started when qualification has not begun", () => {
+    const lead = makeLead({ score: null, qualification_facts: {} });
     render(
       <LeadTable
         leads={[lead]}
@@ -322,11 +330,18 @@ describe("LeadTable — nullable field safety", () => {
         onNewLead={noop}
       />
     );
-    expect(screen.getByText("Not scored")).toBeInTheDocument();
+    expect(screen.getByText("Not started")).toBeInTheDocument();
   });
 
-  it("shows the numeric score when it is a number", () => {
-    const lead = makeLead({ score: 82 });
+  it("shows captured budget when qualification facts exist", () => {
+    const lead = makeLead({
+      email: "ahmed@example.com",
+      qualification_facts: {
+        budget: "AED 1.5M",
+        timeline: "3 months",
+        location: "Dubai Marina",
+      },
+    });
     render(
       <LeadTable
         leads={[lead]}
@@ -336,20 +351,23 @@ describe("LeadTable — nullable field safety", () => {
         onNewLead={noop}
       />
     );
-    expect(screen.getByText("82")).toBeInTheDocument();
+    expect(screen.getByText("AED 1.5M")).toBeInTheDocument();
+    expect(screen.getByText("3 months")).toBeInTheDocument();
   });
 });
 
 // ---------------------------------------------------------------------------
-// Owner column (Phase 2.4.2)
+// Qualification facts
 // ---------------------------------------------------------------------------
 
-const OWNER_ID = "owner111-0000-0000-0000-000000000001";
-const MEMBERS = [{ user_id: OWNER_ID, display_name: "Sarah Manager" }];
-
-describe("LeadTable — owner column", () => {
-  it("shows 'Unassigned' when owner_id is null and no members are passed", () => {
-    const lead = makeLead({ owner_id: null });
+describe("LeadTable — qualification facts", () => {
+  it("shows interest from property type and location", () => {
+    const lead = makeLead({
+      qualification_facts: {
+        property_type: "2BR Apartment",
+        location: "Dubai Marina",
+      },
+    });
     render(
       <LeadTable
         leads={[lead]}
@@ -359,11 +377,11 @@ describe("LeadTable — owner column", () => {
         onNewLead={noop}
       />
     );
-    expect(screen.getByText("Unassigned")).toBeInTheDocument();
+    expect(screen.getByText("2BR Apartment · Dubai Marina")).toBeInTheDocument();
   });
 
-  it("shows 'Unassigned' when owner_id is null even with members provided", () => {
-    const lead = makeLead({ owner_id: null });
+  it("renders placeholder dashes when facts are empty", () => {
+    const lead = makeLead({ qualification_facts: {} });
     render(
       <LeadTable
         leads={[lead]}
@@ -371,40 +389,8 @@ describe("LeadTable — owner column", () => {
         error={null}
         onRetry={noop}
         onNewLead={noop}
-        members={MEMBERS}
       />
     );
-    expect(screen.getByText("Unassigned")).toBeInTheDocument();
-  });
-
-  it("shows owner display name when owner_id matches a member", () => {
-    const lead = makeLead({ owner_id: OWNER_ID });
-    render(
-      <LeadTable
-        leads={[lead]}
-        isLoading={false}
-        error={null}
-        onRetry={noop}
-        onNewLead={noop}
-        members={MEMBERS}
-      />
-    );
-    expect(screen.getByText("Sarah Manager")).toBeInTheDocument();
-  });
-
-  it("shows '—' when owner_id is set but members list is empty", () => {
-    const lead = makeLead({ owner_id: OWNER_ID });
-    render(
-      <LeadTable
-        leads={[lead]}
-        isLoading={false}
-        error={null}
-        onRetry={noop}
-        onNewLead={noop}
-        members={[]}
-      />
-    );
-    // Owner not found in empty members list; shows "—" placeholder
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 });
