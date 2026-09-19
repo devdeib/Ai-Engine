@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // typedRoutes: true — disabled during Phase 1 since placeholder routes
-  // are not all implemented. Re-enable when all routes are established.
+  allowedDevOrigins: ["10.2.0.2"],
 };
 
 export default nextConfig;

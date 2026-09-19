@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -18,10 +18,11 @@ import {
   X,
   Building,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { getInitials } from "@/lib/utils";
 import { signOutAction } from "@/modules/auth/actions";
+import { setCurrentOrganizationAction } from "@/modules/organizations/actions";
 import { ZeusLogo } from "@/components/brand/zeus-logo";
 import { getDashboardPageMeta } from "@/components/dashboard/page-meta";
 import type { Profile, OrganizationWithRole } from "@/lib/db/types";
@@ -57,6 +58,7 @@ interface DashboardShellProps {
 
 export function DashboardShell({
   profile,
+  organizations,
   currentOrganization,
   children,
 }: DashboardShellProps) {
@@ -70,6 +72,7 @@ export function DashboardShell({
         <SidebarContent
           pathname={pathname}
           profile={profile}
+          organizations={organizations}
           currentOrganization={currentOrganization}
         />
       </aside>
@@ -91,6 +94,7 @@ export function DashboardShell({
             <SidebarContent
               pathname={pathname}
               profile={profile}
+              organizations={organizations}
               currentOrganization={currentOrganization}
             />
           </aside>
@@ -142,10 +146,12 @@ export function DashboardShell({
 function SidebarContent({
   pathname,
   profile,
+  organizations,
   currentOrganization,
 }: {
   pathname: string;
   profile: Profile;
+  organizations: OrganizationWithRole[];
   currentOrganization: OrganizationWithRole | null;
 }) {
   return (
@@ -154,21 +160,17 @@ function SidebarContent({
         <ZeusLogo />
       </div>
 
-      {currentOrganization && (
+      {currentOrganization ? (
         <div className="px-3 pt-4 pb-1">
           <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
             <Building className="h-3.5 w-3.5 text-sidebar-foreground/40 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-sidebar-foreground truncate">
-                {currentOrganization.name}
-              </p>
-              <p className="text-[10px] text-sidebar-foreground/45 capitalize">
-                {currentOrganization.role}
-              </p>
-            </div>
+            <OrganizationSwitcher
+              organizations={organizations}
+              currentOrganization={currentOrganization}
+            />
           </div>
         </div>
-      )}
+      ) : null}
 
       <nav className="flex-1 overflow-y-auto px-3 py-3">
         <NavSection title="Main" items={mainNav} pathname={pathname} />
@@ -200,6 +202,61 @@ function SidebarContent({
         </p>
       </div>
     </>
+  );
+}
+
+function OrganizationSwitcher({
+  organizations,
+  currentOrganization,
+}: {
+  organizations: OrganizationWithRole[];
+  currentOrganization: OrganizationWithRole;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  if (organizations.length < 2) {
+    return (
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-sidebar-foreground truncate">
+          {currentOrganization.name}
+        </p>
+        <p className="text-[10px] text-sidebar-foreground/45 capitalize">
+          {currentOrganization.role}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 min-w-0">
+      <label className="sr-only" htmlFor="workspace-switcher">
+        Workspace
+      </label>
+      <select
+        id="workspace-switcher"
+        aria-label="Workspace"
+        disabled={pending}
+        value={currentOrganization.id}
+        onChange={(event) => {
+          const organizationId = event.target.value;
+          startTransition(async () => {
+            await setCurrentOrganizationAction(organizationId);
+            router.refresh();
+          });
+        }}
+        className="w-full truncate bg-transparent text-xs font-medium text-sidebar-foreground outline-none"
+      >
+        {organizations.map((organization) => (
+          <option key={organization.id} value={organization.id}>
+            {organization.name}
+          </option>
+        ))}
+      </select>
+      <p className="text-[10px] text-sidebar-foreground/45 capitalize">
+        {currentOrganization.role}
+      </p>
+    </div>
   );
 }
 

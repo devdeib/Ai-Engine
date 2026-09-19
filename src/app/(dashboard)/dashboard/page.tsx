@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getUserOrganizations } from "@/modules/auth/queries";
+import { getCurrentOrganization } from "@/modules/auth/queries";
 import { Card, CardContent } from "@/components/ui/card";
 import { OverviewDashboard } from "@/modules/dashboard/components/overview-dashboard";
 
@@ -8,8 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
-  const organizations = await getUserOrganizations();
-  const currentOrg = organizations[0] ?? null;
+  const currentOrg = await getCurrentOrganization();
 
   if (!currentOrg) {
     return (

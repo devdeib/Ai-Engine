@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { getUserOrganizations } from "@/modules/auth/queries";
+import { getCurrentOrganization } from "@/modules/auth/queries";
 import { LeadsClient } from "@/modules/leads/components/leads-client";
 import { Card, CardContent } from "@/components/ui/card";
 import LeadsLoading from "./loading";
@@ -8,8 +8,7 @@ import LeadsLoading from "./loading";
 export const metadata: Metadata = { title: "Leads" };
 
 export default async function LeadsPage() {
-  const organizations = await getUserOrganizations();
-  const currentOrg = organizations[0] ?? null;
+  const currentOrg = await getCurrentOrganization();
 
   if (!currentOrg) {
     return (

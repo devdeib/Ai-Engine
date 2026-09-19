@@ -6,7 +6,7 @@ export default function FollowUpsLoading() {
         <div className="h-4 w-64 rounded-md bg-muted animate-pulse" />
       </div>
       <div className="flex gap-2">
-        {[72, 88, 88, 48].map((w) => (
+        {[72, 80, 96, 48].map((w) => (
           <div
             key={w}
             className="h-8 rounded-md bg-muted animate-pulse"

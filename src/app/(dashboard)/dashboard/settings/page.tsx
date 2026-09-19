@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getCurrentProfile, getUserOrganizations } from "@/modules/auth/queries";
+import { getCurrentProfile, getCurrentOrganization } from "@/modules/auth/queries";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { formatDate } from "@/lib/utils";
 import { OrganizationSettingsForm } from "@/modules/organizations/components/organization-settings-form";
@@ -7,12 +7,10 @@ import { OrganizationSettingsForm } from "@/modules/organizations/components/org
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
-  const [profile, organizations] = await Promise.all([
+  const [profile, currentOrg] = await Promise.all([
     getCurrentProfile(),
-    getUserOrganizations(),
+    getCurrentOrganization(),
   ]);
-
-  const currentOrg = organizations[0] ?? null;
 
   return (
     <div className="space-y-6 max-w-2xl">

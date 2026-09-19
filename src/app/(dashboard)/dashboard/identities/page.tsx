@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import { getUserOrganizations } from "@/modules/auth/queries";
+import { getCurrentOrganization } from "@/modules/auth/queries";
 import { IdentityMatchingClient } from "@/modules/channels/components/identity-matching-client";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const metadata: Metadata = { title: "Channel Identities" };
 
 export default async function IdentitiesPage() {
-  const organizations = await getUserOrganizations();
-  const currentOrg = organizations[0] ?? null;
+  const currentOrg = await getCurrentOrganization();
 
   if (!currentOrg) {
     return (

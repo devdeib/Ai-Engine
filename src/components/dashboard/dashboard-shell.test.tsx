@@ -5,10 +5,15 @@ import type { OrganizationWithRole, Profile } from "@/lib/db/types";
 
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(() => "/dashboard/identities"),
+  useRouter: vi.fn(() => ({ refresh: vi.fn() })),
 }));
 
 vi.mock("@/modules/auth/actions", () => ({
   signOutAction: vi.fn(),
+}));
+
+vi.mock("@/modules/organizations/actions", () => ({
+  setCurrentOrganizationAction: vi.fn(),
 }));
 
 import { DashboardShell } from "./dashboard-shell";

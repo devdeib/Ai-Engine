@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { getUserOrganizations } from "@/modules/auth/queries";
+import { getCurrentOrganization } from "@/modules/auth/queries";
 import { ConversationsClient } from "@/modules/conversations/components/conversations-client";
 import { Card, CardContent } from "@/components/ui/card";
 import ConversationsLoading from "./loading";
@@ -8,8 +8,7 @@ import ConversationsLoading from "./loading";
 export const metadata: Metadata = { title: "Conversations" };
 
 export default async function ConversationsPage() {
-  const organizations = await getUserOrganizations();
-  const currentOrg = organizations[0] ?? null;
+  const currentOrg = await getCurrentOrganization();
 
   if (!currentOrg) {
     return (

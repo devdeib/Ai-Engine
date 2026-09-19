@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getCurrentProfile, getUserOrganizations } from "@/modules/auth/queries";
+import {
+  getCurrentProfile,
+  getCurrentOrganization,
+  getUserOrganizations,
+} from "@/modules/auth/queries";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 
 export default async function DashboardLayout({
@@ -22,7 +26,7 @@ export default async function DashboardLayout({
     getUserOrganizations(),
   ]);
 
-  const currentOrg = organizations[0] ?? null;
+  const currentOrg = await getCurrentOrganization(organizations);
 
   return (
     <DashboardShell

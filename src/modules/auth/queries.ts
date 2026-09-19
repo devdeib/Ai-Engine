@@ -4,9 +4,14 @@
  * All functions require a server-side Supabase client.
  */
 import "server-only";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { AuthenticationError } from "@/lib/errors";
 import type { Profile, OrganizationWithRole } from "@/lib/db/types";
+import {
+  resolveCurrentOrganization,
+  CURRENT_ORGANIZATION_COOKIE,
+} from "@/modules/organizations/current-organization";
 
 /**
  * Returns the currently authenticated user, or null if not signed in.
@@ -101,4 +106,17 @@ export async function getUserOrganizations(): Promise<OrganizationWithRole[]> {
       ...(row.organizations as NonNullable<MemberWithOrg["organizations"]>),
       role: row.role as import("@/lib/db/types").MemberRole,
     }));
+}
+
+/**
+ * Returns the workspace the dashboard should load: cookie selection if valid,
+ * otherwise a business org instead of a personal signup workspace.
+ */
+export async function getCurrentOrganization(
+  organizations?: OrganizationWithRole[]
+): Promise<OrganizationWithRole | null> {
+  const list = organizations ?? (await getUserOrganizations());
+  const cookieStore = await cookies();
+  const preferredId = cookieStore.get(CURRENT_ORGANIZATION_COOKIE)?.value ?? null;
+  return resolveCurrentOrganization(list, preferredId);
 }

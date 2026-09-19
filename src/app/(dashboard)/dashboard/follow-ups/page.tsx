@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { getUserOrganizations } from "@/modules/auth/queries";
+import { getCurrentOrganization } from "@/modules/auth/queries";
 import { FollowUpsQueueClient } from "@/modules/follow-ups/components/follow-ups-queue-client";
 import { Card, CardContent } from "@/components/ui/card";
 import FollowUpsLoading from "./loading";
@@ -8,8 +8,7 @@ import FollowUpsLoading from "./loading";
 export const metadata: Metadata = { title: "Follow-ups" };
 
 export default async function FollowUpsPage() {
-  const organizations = await getUserOrganizations();
-  const currentOrg = organizations[0] ?? null;
+  const currentOrg = await getCurrentOrganization();
 
   if (!currentOrg) {
     return (
