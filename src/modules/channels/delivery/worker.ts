@@ -166,24 +166,36 @@ async function loadTrustedDeliveryScope(
 > {
   const supabase = await createClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: message, error: messageError } = await (supabase.from("messages") as any)
-    .select("id, organization_id, direction, body")
-    .eq("id", job.message_id)
-    .eq("organization_id", job.organization_id)
-    .maybeSingle();
+  /* Phase 1: message, account, and ref can load in parallel — they are
+     independent lookups scoped by organization_id. */
+  const [messageResult, accountResult, refResult] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("messages") as any)
+      .select("id, organization_id, direction, body")
+      .eq("id", job.message_id)
+      .eq("organization_id", job.organization_id)
+      .maybeSingle(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("channel_accounts") as any)
+      .select("id, organization_id, channel, status")
+      .eq("id", job.channel_account_id)
+      .eq("organization_id", job.organization_id)
+      .maybeSingle(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("channel_message_refs") as any)
+      .select("channel_identity_id")
+      .eq("organization_id", job.organization_id)
+      .eq("message_id", job.message_id)
+      .eq("direction", "outbound")
+      .maybeSingle(),
+  ]);
 
+  const { data: message, error: messageError } = messageResult;
   if (messageError || !message || message.direction !== "outbound") {
     return { ok: false, errorCode: "TENANT_ACCESS_DENIED" };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: account, error: accountError } = await (supabase.from("channel_accounts") as any)
-    .select("id, organization_id, channel, status")
-    .eq("id", job.channel_account_id)
-    .eq("organization_id", job.organization_id)
-    .maybeSingle();
-
+  const { data: account, error: accountError } = accountResult;
   if (accountError || !account || account.status !== "active") {
     return { ok: false, errorCode: "TENANT_ACCESS_DENIED" };
   }
@@ -201,18 +213,12 @@ async function loadTrustedDeliveryScope(
     throw error;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: ref, error: refError } = await (supabase.from("channel_message_refs") as any)
-    .select("channel_identity_id")
-    .eq("organization_id", job.organization_id)
-    .eq("message_id", job.message_id)
-    .eq("direction", "outbound")
-    .maybeSingle();
-
+  const { data: ref, error: refError } = refResult;
   if (refError || !ref?.channel_identity_id) {
     return { ok: false, errorCode: "TENANT_ACCESS_DENIED" };
   }
 
+  /* Phase 2: identity lookup depends on ref.channel_identity_id. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: identity, error: identityError } = await (supabase.from("channel_identities") as any)
     .select("id, external_address")

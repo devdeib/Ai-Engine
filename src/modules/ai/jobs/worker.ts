@@ -107,25 +107,29 @@ async function executeClaimedJob(job: AiExecutionJob): Promise<void> {
 async function loadTrustedJobScope(job: AiExecutionJob): Promise<boolean> {
   const supabase = await createClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: conversation, error: conversationError } = await (supabase.from("conversations") as any)
-    .select("id, organization_id")
-    .eq("id", job.conversation_id)
-    .eq("organization_id", job.organization_id)
-    .maybeSingle();
+  /* Both lookups are independent and scoped by organization_id — run in parallel. */
+  const [conversationResult, inboundResult] = await Promise.all([
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("conversations") as any)
+      .select("id, organization_id")
+      .eq("id", job.conversation_id)
+      .eq("organization_id", job.organization_id)
+      .maybeSingle(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("messages") as any)
+      .select("id, organization_id, conversation_id, direction, author_type")
+      .eq("id", job.inbound_message_id)
+      .eq("organization_id", job.organization_id)
+      .eq("conversation_id", job.conversation_id)
+      .maybeSingle(),
+  ]);
 
+  const { data: conversation, error: conversationError } = conversationResult;
   if (conversationError || !conversation) {
     return false;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: inbound, error: inboundError } = await (supabase.from("messages") as any)
-    .select("id, organization_id, conversation_id, direction, author_type")
-    .eq("id", job.inbound_message_id)
-    .eq("organization_id", job.organization_id)
-    .eq("conversation_id", job.conversation_id)
-    .maybeSingle();
-
+  const { data: inbound, error: inboundError } = inboundResult;
   if (inboundError || !inbound) {
     return false;
   }

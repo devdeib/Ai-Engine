@@ -161,6 +161,8 @@ export async function processConversationMessage(
     userId,
     conversationId,
     inboundMessageId: decision.inboundMessageId,
+    preloadedConversation: conversation,
+    preloadedMessages: messages,
   });
   const prompt = getSalesAgentPrompt();
   const provider = options.provider ?? createAiProvider();
@@ -209,69 +211,11 @@ export async function processConversationMessage(
     });
   }
 
-  const inbound = messages.find((message) => message.id === decision.inboundMessageId);
-  const pipeline = await buildPipelineSnapshot({
-    organizationId,
-    leadId: conversation.lead_id,
-    conversationId,
-    leadStatus: context.lead.status,
-    conversationStatus: context.conversation.status,
-    requiresHuman: context.conversation.requiresHuman,
-    aiPausedAt: context.conversation.aiPausedAt,
-    contactEmailPresent: Boolean(
-      context.lead.email && context.lead.email.trim()
-    ),
-    contactPhonePresent: Boolean(
-      context.lead.phone && context.lead.phone.trim()
-    ),
-    messages: context.messages.map((message) => ({
-      direction: message.direction,
-      createdAt: message.createdAt,
-    })),
-  });
-  context.pipeline = pipeline;
-
-  const analysisRow = await recordAdvisoryAnalysis({
-    provider,
-    context,
-    pipeline,
-    conversationId,
-    organizationId,
-    userId,
-    triggerSource: actor.triggerSource,
-    channelIdentityId: actor.channelIdentityId,
-    leadId: conversation.lead_id,
-    inboundMessageId: decision.inboundMessageId,
-    inboundMessageCreatedAt: inbound?.created_at ?? new Date().toISOString(),
-    draftReply: body,
-  });
-
-  await recordSalesRecommendation({
-    pipeline,
-    analysisRow,
-    conversationId,
-    organizationId,
-    userId,
-    triggerSource: actor.triggerSource,
-    channelIdentityId: actor.channelIdentityId,
-    leadId: conversation.lead_id,
-    inboundMessageId: decision.inboundMessageId,
-    inboundMessageCreatedAt: inbound?.created_at ?? new Date().toISOString(),
-  });
-
-  await runRecommendationExecution({
-    organizationId,
-    userId,
-    triggerSource: actor.triggerSource,
-    channelIdentityId: actor.channelIdentityId,
-    conversationId,
-    leadId: conversation.lead_id,
-    inboundMessageId: decision.inboundMessageId,
-    analysisPayload:
-      analysisRow?.status === "recorded"
-        ? validateAiSalesAnalysis(analysisRow.payload)
-        : null,
-  });
+  /* ------------------------------------------------------------------ */
+  /* Persist the AI message and enqueue delivery BEFORE advisory work.   */
+  /* Advisory analysis, recommendation, and execution are non-blocking  */
+  /* CRM enrichment — they must not delay the customer-facing response. */
+  /* ------------------------------------------------------------------ */
 
   const supabase = await createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -321,6 +265,84 @@ export async function processConversationMessage(
     conversation,
     messageId: message.id,
   });
+
+  /* ------------------------------------------------------------------ */
+  /* Advisory analysis, recommendation, and execution run after delivery */
+  /* is enqueued so the customer receives the response without waiting.  */
+  /* Failures here are logged but never block the responded outcome.     */
+  /* ------------------------------------------------------------------ */
+
+  const inbound = messages.find((m) => m.id === decision.inboundMessageId);
+  try {
+    const pipeline = await buildPipelineSnapshot({
+      organizationId,
+      leadId: conversation.lead_id,
+      conversationId,
+      leadStatus: context.lead.status,
+      conversationStatus: context.conversation.status,
+      requiresHuman: context.conversation.requiresHuman,
+      aiPausedAt: context.conversation.aiPausedAt,
+      contactEmailPresent: Boolean(
+        context.lead.email && context.lead.email.trim()
+      ),
+      contactPhonePresent: Boolean(
+        context.lead.phone && context.lead.phone.trim()
+      ),
+      messages: context.messages.map((m) => ({
+        direction: m.direction,
+        createdAt: m.createdAt,
+      })),
+    });
+    context.pipeline = pipeline;
+
+    const analysisRow = await recordAdvisoryAnalysis({
+      provider,
+      context,
+      pipeline,
+      conversationId,
+      organizationId,
+      userId,
+      triggerSource: actor.triggerSource,
+      channelIdentityId: actor.channelIdentityId,
+      leadId: conversation.lead_id,
+      inboundMessageId: decision.inboundMessageId,
+      inboundMessageCreatedAt: inbound?.created_at ?? new Date().toISOString(),
+      draftReply: body,
+    });
+
+    await recordSalesRecommendation({
+      pipeline,
+      analysisRow,
+      conversationId,
+      organizationId,
+      userId,
+      triggerSource: actor.triggerSource,
+      channelIdentityId: actor.channelIdentityId,
+      leadId: conversation.lead_id,
+      inboundMessageId: decision.inboundMessageId,
+      inboundMessageCreatedAt: inbound?.created_at ?? new Date().toISOString(),
+    });
+
+    await runRecommendationExecution({
+      organizationId,
+      userId,
+      triggerSource: actor.triggerSource,
+      channelIdentityId: actor.channelIdentityId,
+      conversationId,
+      leadId: conversation.lead_id,
+      inboundMessageId: decision.inboundMessageId,
+      analysisPayload:
+        analysisRow?.status === "recorded"
+          ? validateAiSalesAnalysis(analysisRow.payload)
+          : null,
+    });
+  } catch {
+    logger.error("Post-response advisory processing failed", {
+      organizationId,
+      conversationId,
+      code: "ADVISORY_PROCESSING_FAILED",
+    });
+  }
 
   return {
     outcome: "responded",

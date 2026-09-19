@@ -376,12 +376,14 @@ describe("processConversationMessage", () => {
       messageId: AI_MSG_ID,
       activityId: ACTIVITY_ID,
     });
-    expect(buildAiContext).toHaveBeenCalledWith({
-      organizationId: ORG_A,
-      userId: USER_1,
-      conversationId: CONV_1,
-      inboundMessageId: INBOUND_ID,
-    });
+    expect(buildAiContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: ORG_A,
+        userId: USER_1,
+        conversationId: CONV_1,
+        inboundMessageId: INBOUND_ID,
+      })
+    );
     expect(capturedInsert.value).toEqual({
       organization_id: ORG_A,
       conversation_id: CONV_1,
@@ -684,7 +686,9 @@ describe("processConversationMessage", () => {
     const insertOrder = insert.mock.invocationCallOrder[0] ?? 0;
     expect(analysisOrder).toBeLessThan(recommendationOrder);
     expect(recommendationOrder).toBeLessThan(executionOrder);
-    expect(executionOrder).toBeLessThan(insertOrder);
+    /* Message insert and delivery enqueue now happen BEFORE advisory
+       analysis so the customer response is not delayed by CRM enrichment. */
+    expect(insertOrder).toBeLessThan(analysisOrder);
   });
 
   it("still sends the reply when recommendation execution throws", async () => {
@@ -820,12 +824,14 @@ describe("processConversationMessage", () => {
       expect(result.outcome).toBe("responded");
       expect(requireOrgMembership).not.toHaveBeenCalled();
       expect(getConversation).toHaveBeenCalledWith(ORG_A, null, CONV_1);
-      expect(buildAiContext).toHaveBeenCalledWith({
-        organizationId: ORG_A,
-        userId: null,
-        conversationId: CONV_1,
-        inboundMessageId: INBOUND_ID,
-      });
+      expect(buildAiContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: ORG_A,
+          userId: null,
+          conversationId: CONV_1,
+          inboundMessageId: INBOUND_ID,
+        })
+      );
       expect(listRecentConversationMessages).toHaveBeenCalledWith(
         ORG_A,
         null,

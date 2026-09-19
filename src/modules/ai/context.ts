@@ -1,14 +1,22 @@
 /**
  * Builds tenant-scoped CRM context for the AI. Never dumps the whole database.
  * IDs and secrets are omitted from the prompt-facing shape.
+ *
+ * Accepts optional pre-loaded conversation and messages so the service layer
+ * can avoid redundant database round-trips that have already been performed
+ * for eligibility checks. The pipeline snapshot is deferred (set to a
+ * zero-value placeholder) because the LLM prompt destructures it out and
+ * the service rebuilds it after the AI response when it is actually needed.
  */
 import "server-only";
-import type { Message } from "@/lib/db/types";
+import type { ConversationWithLead, Message } from "@/lib/db/types";
 import { getOrganization, getOrganizationName } from "@/modules/organizations/queries";
 import { getOrganizationSalesProfile } from "@/modules/organizations/sales-profile";
 import { getLead } from "@/modules/leads/queries";
-import { getConversation } from "@/modules/conversations/queries";
-import { listRecentConversationMessages } from "@/modules/conversations/queries";
+import {
+  getConversation,
+  listRecentConversationMessages,
+} from "@/modules/conversations/queries";
 import { listLeadFollowUps } from "@/modules/follow-ups/queries";
 import { listLeadAppointments } from "@/modules/appointments/queries";
 import { listLeadActivities } from "@/modules/leads/activities/queries";
@@ -17,9 +25,9 @@ import {
   AI_CONTEXT_SIDE_LIMIT,
   type AiContext,
   type AiMessageContext,
+  type AiPipelineSnapshot,
   type AiSalesProfileContext,
 } from "@/modules/ai/types";
-import { buildPipelineSnapshot } from "@/modules/ai/pipeline";
 import { mapAuthorTypeForAiContext } from "@/modules/ai/principal";
 import type { OrganizationSalesProfilePublic } from "@/modules/organizations/sales-profile-schema";
 import { buildLeadQualificationView } from "@/modules/leads/qualification";
@@ -36,7 +44,7 @@ function toAiSalesProfile(
   };
 }
 
-function toAiMessageContext(message: Message): AiMessageContext {
+export function toAiMessageContext(message: Message): AiMessageContext {
   return {
     direction: message.direction,
     authorType: mapAuthorTypeForAiContext(message.author_type),
@@ -58,23 +66,52 @@ function selectLatestCustomerMessage(
   return toAiMessageContext(selected);
 }
 
+/**
+ * Placeholder pipeline snapshot. The LLM prompt destructures pipeline out
+ * (`const { pipeline: _pipeline, ...untrusted } = context`), so it is never
+ * sent to OpenAI. The service layer rebuilds it after the AI response when
+ * it is actually needed for advisory analysis and recommendations.
+ */
+const DEFERRED_PIPELINE_SNAPSHOT: AiPipelineSnapshot = {
+  leadStatus: "new",
+  conversationStatus: "open",
+  requiresHuman: false,
+  aiPaused: false,
+  latestMessageDirection: "inbound",
+  lastInboundAt: null,
+  lastOutboundAt: null,
+  hasScheduledAppointment: false,
+  hasPendingFollowUp: false,
+  hasPendingAppointmentApproval: false,
+  contactEmailPresent: false,
+  contactPhonePresent: false,
+};
+
 export async function buildAiContext(input: {
   organizationId: string;
   userId: string | null;
   conversationId: string;
   inboundMessageId?: string;
+  /** Pre-loaded conversation — avoids a redundant getConversation() call. */
+  preloadedConversation?: ConversationWithLead;
+  /** Pre-loaded messages — avoids a redundant listRecentConversationMessages() call. */
+  preloadedMessages?: Message[];
 }): Promise<AiContext> {
-  const conversation = await getConversation(
-    input.organizationId,
-    input.userId,
-    input.conversationId
-  );
+  const conversation =
+    input.preloadedConversation ??
+    (await getConversation(
+      input.organizationId,
+      input.userId,
+      input.conversationId
+    ));
+
+  const needsMessages = !input.preloadedMessages;
 
   const [
     organizationName,
     salesProfile,
     lead,
-    messages,
+    loadedMessages,
     followUps,
     appointments,
     activities,
@@ -86,12 +123,14 @@ export async function buildAiContext(input: {
       : getOrganizationName(input.organizationId),
     getOrganizationSalesProfile(input.organizationId, input.userId),
     getLead(conversation.lead_id, input.organizationId, input.userId),
-    listRecentConversationMessages(
-      input.organizationId,
-      input.userId,
-      input.conversationId,
-      AI_CONTEXT_MESSAGE_LIMIT
-    ),
+    needsMessages
+      ? listRecentConversationMessages(
+          input.organizationId,
+          input.userId,
+          input.conversationId,
+          AI_CONTEXT_MESSAGE_LIMIT
+        )
+      : Promise.resolve(null),
     listLeadFollowUps(
       input.organizationId,
       input.userId,
@@ -111,6 +150,8 @@ export async function buildAiContext(input: {
       { page: 1, limit: AI_CONTEXT_SIDE_LIMIT }
     ),
   ]);
+
+  const msgList = input.preloadedMessages ?? loadedMessages ?? [];
 
   const qualification = buildLeadQualificationView({
     email: lead.email,
@@ -142,9 +183,9 @@ export async function buildAiContext(input: {
       requiresHuman: conversation.requires_human,
       aiPausedAt: conversation.ai_paused_at,
     },
-    messages: messages.map(toAiMessageContext),
+    messages: msgList.map(toAiMessageContext),
     latestCustomerMessage: selectLatestCustomerMessage(
-      messages,
+      msgList,
       input.inboundMessageId
     ),
     followUps: followUps.map((item) => ({
@@ -162,20 +203,6 @@ export async function buildAiContext(input: {
       content: item.content,
       createdAt: item.created_at,
     })),
-    pipeline: await buildPipelineSnapshot({
-      organizationId: input.organizationId,
-      leadId: conversation.lead_id,
-      conversationId: input.conversationId,
-      leadStatus: lead.status,
-      conversationStatus: conversation.status,
-      requiresHuman: conversation.requires_human,
-      aiPausedAt: conversation.ai_paused_at,
-      contactEmailPresent: Boolean(lead.email && lead.email.trim()),
-      contactPhonePresent: Boolean(lead.phone && lead.phone.trim()),
-      messages: messages.map((message) => ({
-        direction: message.direction,
-        createdAt: message.created_at,
-      })),
-    }),
+    pipeline: DEFERRED_PIPELINE_SNAPSHOT,
   };
 }
