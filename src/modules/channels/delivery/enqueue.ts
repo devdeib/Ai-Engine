@@ -29,17 +29,42 @@ export async function enqueueChannelDelivery(input: {
 }): Promise<void> {
   const supabase = createAdminClient();
 
-  const refStart = Date.now();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const refInsert = await (supabase.from("channel_message_refs") as any).insert({
-    organization_id: input.organizationId,
-    message_id: input.messageId,
-    channel_account_id: input.channelAccountId,
-    channel_identity_id: input.channelIdentityId,
-    direction: "outbound",
-    delivery_status: "queued",
-  });
-  const refDuration = Date.now() - refStart;
+  /* Ref and job rows are independent inserts. Await both before returning so
+     the caller's customer delivery drain cannot start until both durable rows
+     exist. Unique violations remain idempotent success on either insert. */
+  const enqueueStart = Date.now();
+  let refDuration = 0;
+  let jobDuration = 0;
+  const [refInsert, jobInsert] = await Promise.all([
+    (async () => {
+      const start = Date.now();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (supabase.from("channel_message_refs") as any).insert({
+        organization_id: input.organizationId,
+        message_id: input.messageId,
+        channel_account_id: input.channelAccountId,
+        channel_identity_id: input.channelIdentityId,
+        direction: "outbound",
+        delivery_status: "queued",
+      });
+      refDuration = Date.now() - start;
+      return result;
+    })(),
+    (async () => {
+      const start = Date.now();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (supabase.from("channel_delivery_jobs") as any).insert({
+        organization_id: input.organizationId,
+        channel_account_id: input.channelAccountId,
+        message_id: input.messageId,
+        status: "pending",
+        max_attempts: CHANNEL_DELIVERY_MAX_ATTEMPTS,
+      });
+      jobDuration = Date.now() - start;
+      return result;
+    })(),
+  ]);
+  const enqueueWallMs = Date.now() - enqueueStart;
 
   if (refInsert.error && !isUniqueViolation(refInsert.error)) {
     logger.error("Failed to persist outbound channel message ref", {
@@ -49,21 +74,10 @@ export async function enqueueChannelDelivery(input: {
     throw new Error("Failed to persist outbound channel message ref");
   }
 
-  const jobStart = Date.now();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from("channel_delivery_jobs") as any).insert({
-    organization_id: input.organizationId,
-    channel_account_id: input.channelAccountId,
-    message_id: input.messageId,
-    status: "pending",
-    max_attempts: CHANNEL_DELIVERY_MAX_ATTEMPTS,
-  });
-  const jobDuration = Date.now() - jobStart;
-
-  if (error && !isUniqueViolation(error)) {
+  if (jobInsert.error && !isUniqueViolation(jobInsert.error)) {
     logger.error("Failed to enqueue channel delivery job", {
       organizationId: input.organizationId,
-      code: error.code ?? "INTERNAL_ERROR",
+      code: jobInsert.error.code ?? "INTERNAL_ERROR",
     });
     throw new Error("Failed to enqueue channel delivery job");
   }
@@ -73,7 +87,9 @@ export async function enqueueChannelDelivery(input: {
     organizationId: input.organizationId,
     insertRefMs: refDuration,
     insertJobMs: jobDuration,
-    totalMs: refDuration + jobDuration,
+    totalMs: enqueueWallMs,
+    sequential: false,
+    parallel: true,
   });
   recordStage(input.messageId, "delivery_enqueue_ref_inserted");
   recordStage(input.messageId, "delivery_enqueue_job_inserted");

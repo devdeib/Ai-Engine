@@ -180,7 +180,7 @@ describe("enqueueChannelDelivery", () => {
     expect(jobInsert).toHaveBeenCalledTimes(1);
   });
 
-  it("surfaces a non-unique ref insert failure without deleting the outbound message", async () => {
+  it("surfaces a non-unique ref insert failure without claiming success", async () => {
     const { refInsert, jobInsert } = mockInserts({
       refError: { code: "57014", message: "statement timeout" },
     });
@@ -195,7 +195,8 @@ describe("enqueueChannelDelivery", () => {
     ).rejects.toThrow("Failed to persist outbound channel message ref");
 
     expect(refInsert).toHaveBeenCalledTimes(1);
-    expect(jobInsert).not.toHaveBeenCalled();
+    /* Ref and job inserts run concurrently; both may have been attempted. */
+    expect(jobInsert).toHaveBeenCalledTimes(1);
   });
 
   it("does not enqueue in_app conversations", async () => {
