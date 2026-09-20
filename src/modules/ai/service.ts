@@ -124,13 +124,37 @@ export async function processConversationMessage(
     await requireOrgMembership(organizationId, principal.userId);
   }
 
-  const convStart = Date.now();
-  const conversation = await getConversation(
-    organizationId,
-    userId,
-    conversationId
-  );
-  const convDuration = Date.now() - convStart;
+  /* Conversation and recent messages are independent once org/user are known.
+     Load them concurrently. Each call still enforces its own membership and
+     conversation/org scope checks — no shared cache, no skipped isolation. */
+  const loadStart = Date.now();
+  let convDuration = 0;
+  let msgDuration = 0;
+  const [conversation, messages] = await Promise.all([
+    (async () => {
+      const start = Date.now();
+      const result = await getConversation(
+        organizationId,
+        userId,
+        conversationId
+      );
+      convDuration = Date.now() - start;
+      return result;
+    })(),
+    (async () => {
+      const start = Date.now();
+      const result = await listRecentConversationMessages(
+        organizationId,
+        userId,
+        conversationId,
+        AI_CONTEXT_MESSAGE_LIMIT
+      );
+      msgDuration = Date.now() - start;
+      return result;
+    })(),
+  ]);
+  const loadWallMs = Date.now() - loadStart;
+
   const actor = auditActorFromPrincipal(
     principal,
     conversation.channel_identity_id
@@ -138,15 +162,6 @@ export async function processConversationMessage(
   if (principal.kind === "channel_ingress" && !actor.channelIdentityId) {
     throw new ValidationError("channel_ingress requires a channel identity");
   }
-
-  const msgStart = Date.now();
-  const messages = await listRecentConversationMessages(
-    organizationId,
-    userId,
-    conversationId,
-    AI_CONTEXT_MESSAGE_LIMIT
-  );
-  const msgDuration = Date.now() - msgStart;
 
   const decision = decideAiAction({ conversation, messages });
   /* For latency tracing: use the inbound message id if responding. */
@@ -159,9 +174,10 @@ export async function processConversationMessage(
       conversationId,
       getConversationMs: convDuration,
       listMessagesMs: msgDuration,
-      totalMs: convDuration + msgDuration,
+      totalMs: loadWallMs,
       messageCount: messages.length,
-      sequential: true,
+      sequential: false,
+      parallel: true,
     });
   }
   if (decision.action === "skip") {
@@ -274,29 +290,41 @@ export async function processConversationMessage(
   }
   if (traceId) recordStage(traceId, "message_persisted");
 
-  const activityStart = Date.now();
-  const activity = await recordLeadActivity({
-    organizationId,
-    userId,
-    leadId: conversation.lead_id,
-    type: "ai",
-    content: aiResponseGeneratedContent(),
-  });
-  const activityDuration = Date.now() - activityStart;
-
-  const bumpStart = Date.now();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const bump = await (supabase.from("conversations") as any)
-    .update({ updated_at: new Date().toISOString() })
-    .eq("id", conversationId)
-    .eq("organization_id", organizationId)
-    .select(CONVERSATION_WITH_LEAD_SELECT)
-    .single();
+  /* Activity logging and conversation recency bump are independent. */
+  const postPersistStart = Date.now();
+  let activityDuration = 0;
+  let bumpDuration = 0;
+  const [activity, bump] = await Promise.all([
+    (async () => {
+      const start = Date.now();
+      const result = await recordLeadActivity({
+        organizationId,
+        userId,
+        leadId: conversation.lead_id,
+        type: "ai",
+        content: aiResponseGeneratedContent(),
+      });
+      activityDuration = Date.now() - start;
+      return result;
+    })(),
+    (async () => {
+      const start = Date.now();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (supabase.from("conversations") as any)
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", conversationId)
+        .eq("organization_id", organizationId)
+        .select(CONVERSATION_WITH_LEAD_SELECT)
+        .single();
+      bumpDuration = Date.now() - start;
+      return result;
+    })(),
+  ]);
 
   if (bump.error) {
     throw new Error("Failed to update conversation recency");
   }
-  const bumpDuration = Date.now() - bumpStart;
+  const postPersistWallMs = Date.now() - postPersistStart;
 
   if (traceId) {
     recordStage(traceId, "delivery_enqueue_start");
@@ -306,7 +334,9 @@ export async function processConversationMessage(
       conversationId,
       recordActivityMs: activityDuration,
       conversationBumpMs: bumpDuration,
-      totalGapMs: activityDuration + bumpDuration,
+      totalGapMs: postPersistWallMs,
+      sequential: false,
+      parallel: true,
     });
   }
   const message = data as Message;
