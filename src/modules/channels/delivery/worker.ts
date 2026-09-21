@@ -106,11 +106,16 @@ async function executeClaimedDeliveryJob(
     }
     recordStage(job.message_id, "delivery_scope_loaded");
 
+    /* Idempotency fields were loaded with the trusted outbound ref in scope —
+       reuse them instead of a second channel_message_refs round trip. */
     const idempotencyStart = Date.now();
-    const existingRef = await loadOutboundMessageRef(job);
+    const existingRef = {
+      delivery_status: scoped.deliveryStatus,
+      provider_message_id: scoped.providerMessageId,
+    };
     const idempotencyDuration = Date.now() - idempotencyStart;
     if (
-      existingRef?.delivery_status === "sent" &&
+      existingRef.delivery_status === "sent" &&
       existingRef.provider_message_id
     ) {
       await markDeliveryCompleted(job);
@@ -148,6 +153,7 @@ async function executeClaimedDeliveryJob(
       scopeRefMs: scoped.forensics.refMs,
       scopeIdentityMs: scoped.forensics.identityMs,
       idempotencyCheckMs: idempotencyDuration,
+      idempotencyReusedScopeRef: true,
       providerApiMs: apiDuration,
       outcomePersistMs: outcomeDuration,
       outcomeUpdateRefMs: outcomeParts.updateRefMs,
@@ -253,6 +259,8 @@ async function loadTrustedDeliveryScope(
       body: string;
       destination: string;
       channelIdentityId: string;
+      deliveryStatus: string | null;
+      providerMessageId: string | null;
       forensics: DeliveryScopeForensics;
     }
   | {
@@ -297,7 +305,7 @@ async function loadTrustedDeliveryScope(
       const start = Date.now();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await (supabase.from("channel_message_refs") as any)
-        .select("channel_identity_id")
+        .select("channel_identity_id, delivery_status, provider_message_id")
         .eq("organization_id", job.organization_id)
         .eq("message_id", job.message_id)
         .eq("direction", "outbound")
@@ -401,32 +409,13 @@ async function loadTrustedDeliveryScope(
     body: message.body as string,
     destination: identity.external_address as string,
     channelIdentityId: identity.id as string,
+    deliveryStatus:
+      typeof ref.delivery_status === "string" ? ref.delivery_status : null,
+    providerMessageId:
+      typeof ref.provider_message_id === "string"
+        ? ref.provider_message_id
+        : null,
     forensics: forensicsBase(),
-  };
-}
-
-async function loadOutboundMessageRef(
-  job: ChannelDeliveryJob
-): Promise<{
-  delivery_status: string | null;
-  provider_message_id: string | null;
-} | null> {
-  const supabase = await createClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase.from("channel_message_refs") as any)
-    .select("delivery_status, provider_message_id")
-    .eq("organization_id", job.organization_id)
-    .eq("message_id", job.message_id)
-    .eq("direction", "outbound")
-    .maybeSingle();
-
-  if (error || !data) {
-    return null;
-  }
-
-  return {
-    delivery_status: (data.delivery_status as string | null) ?? null,
-    provider_message_id: (data.provider_message_id as string | null) ?? null,
   };
 }
 
